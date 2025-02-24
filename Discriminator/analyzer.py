@@ -84,36 +84,35 @@ def plot_analysis_results(results_df, measurements, output_dir):
                 upper_bound = q3 + 1.5 * iqr
                 lower_bound = max(0, q1 - 1.5 * iqr)
                 
-                ax1.plot(results_df['window_start'], results_df[mean_col], 
-                        label=col, color=colors[idx])
-                ax1.fill_between(results_df['window_start'],
-                               results_df[mean_col] - results_df[std_col],
-                               results_df[mean_col] + results_df[std_col],
-                               alpha=0.2, color=colors[idx])
+                ax1.scatter(results_df['window_start'], results_df[mean_col], 
+                          label=col, color=colors[idx], alpha=0.7)
+                ax1.errorbar(results_df['window_start'], results_df[mean_col], 
+                           yerr=results_df[std_col], fmt='none', 
+                           alpha=0.2, color=colors[idx])
                 ax1.set_ylabel('Mean ± Std')
                 ax1.set_ylim(bottom=0) 
                 ax1.legend()
                 
-                ax2.plot(results_df['window_start'], results_df[std_col],
-                        label=col, color=colors[idx])
+                ax2.scatter(results_df['window_start'], results_df[std_col],
+                          label=col, color=colors[idx], alpha=0.7)
                 ax2.set_ylabel('Standard Deviation')
                 ax2.set_ylim(bottom=0)  
                 ax2.legend()
                 
-                ax3.plot(results_df['window_start'], results_df[std_pct_col].clip(lower_bound, upper_bound),
-                        label=col, color=colors[idx])
+                ax3.scatter(results_df['window_start'], results_df[std_pct_col].clip(lower_bound, upper_bound),
+                          label=col, color=colors[idx], alpha=0.7)
                 ax3.set_ylabel('Standard Deviation (%) [clipped]')
                 ax3.set_ylim(bottom=0)  
                 ax3.legend()
                 
-                ax4.plot(results_df['window_start'], results_df[var_col],
-                        label=col, color=colors[idx])
+                ax4.scatter(results_df['window_start'], results_df[var_col],
+                          label=col, color=colors[idx], alpha=0.7)
                 ax4.set_ylabel('Variance')
                 ax4.set_ylim(bottom=0)  
                 ax4.legend()
                 
-                ax5.plot(results_df['window_start'], results_df[snr_col],
-                        label=col, color=colors[idx])
+                ax5.scatter(results_df['window_start'], results_df[snr_col],
+                          label=col, color=colors[idx], alpha=0.7)
                 ax5.set_ylabel('SNR (dB)')
                 ax5.set_ylim(bottom=0) 
                 ax5.legend()
