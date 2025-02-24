@@ -1,0 +1,12 @@
+*.csv
+!/Discriminator/*.csv
+/Discriminator/*/*.csv
+
+*.png
+*.pdf
+/Mosaik/__pycache__
+/Panda/__pycache__
+*pyc
+*.zip
+/Discriminator/results
+*.joblib
