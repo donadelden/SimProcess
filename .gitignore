@@ -1,7 +1,4 @@
 *.csv
-!/Discriminator/*.csv
-/Discriminator/*/*.csv
-
 *.png
 *.pdf
 /Mosaik/__pycache__
