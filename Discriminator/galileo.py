@@ -31,7 +31,15 @@ def extract_features(signal):
     skewness = feature_calculators.skewness(signal)
     approx_entropy = feature_calculators.approximate_entropy(signal,m=2,r=0.1)
     autocorr = feature_calculators.autocorrelation(signal,lag=1)
-    
+    kurtosis = feature_calculators.kurtosis(signal)
+    fourier_entropy = feature_calculators.fourier_entropy(signal, bins=10)
+    lempev = feature_calculators.lempel_ziv_complexity(signal, bins=10)
+    longest_above_mean = feature_calculators.longest_strike_above_mean(signal)
+    longest_below_mean = feature_calculators.longest_strike_below_mean(signal)
+    n_peaks = feature_calculators.number_peaks(signal,n=2)
+    permutation_entropy = feature_calculators.permutation_entropy(signal, tau=1, dimension=3)
+    partial_autocorrelation = feature_calculators.partial_autocorrelation(signal,lag=1)
+
     features = {
         'std': std,
         'variance': variance,
@@ -39,6 +47,15 @@ def extract_features(signal):
         'skewness': skewness,
         'approx_entropy':approx_entropy,
         'autocorr':autocorr,
+        'kurtosis':kurtosis,
+        'fourier_entropy':fourier_entropy,
+        'lempev':lempev,
+        'longest_above_mean':longest_above_mean,
+        'longest_below_mean':longest_below_mean,
+        'n_peaks':n_peaks,
+        'permutation_entropy':permutation_entropy,
+        'partial_autocorrelation':partial_autocorrelation,
+
     }
     
     return features
