@@ -23,32 +23,38 @@ def load_data(file_path):
         return None
 
 
-def filter_window(window, epsilon=0.1):
+def filter_window(window, epsilon=0.1, target_column=None):
     """
     Filter a window of data by identifying values that are within epsilon of the mean.
     
     Args:
         window (pandas.DataFrame): Window of data to filter
         epsilon (float): Tolerance as a percentage
+        target_column (str, optional): Specific column to filter. If provided, only this column will be filtered.
         
     Returns:
         pandas.DataFrame: Mask of values to keep
     """
     filter_columns = []
     
-    if 'frequency' in window.columns:
-        filter_columns.append('frequency')
-    
-    for prefix in ['V', 'C']:
-        for i in range(1, 4):
-            col = f"{prefix}{i}"
-            col_lower = col.lower()
-            matching_cols = [c for c in window.columns if c.lower() == col_lower]
-            if matching_cols:
-                filter_columns.extend(matching_cols)
-    
-    power_cols = [col for col in window.columns if 'power' in col.lower()]
-    filter_columns.extend(power_cols)
+    # If target column is specified, only filter that column
+    if target_column and target_column in window.columns:
+        filter_columns = [target_column]
+    else:
+        # Otherwise, filter all relevant columns
+        if 'frequency' in window.columns:
+            filter_columns.append('frequency')
+        
+        for prefix in ['V', 'C']:
+            for i in range(1, 4):
+                col = f"{prefix}{i}"
+                col_lower = col.lower()
+                matching_cols = [c for c in window.columns if c.lower() == col_lower]
+                if matching_cols:
+                    filter_columns.extend(matching_cols)
+        
+        power_cols = [col for col in window.columns if 'power' in col.lower()]
+        filter_columns.extend(power_cols)
     
     filter_columns = [col for col in filter_columns if col in window.columns]
     filter_columns = [col for col in filter_columns if np.issubdtype(window[col].dtype, np.number)]
@@ -75,7 +81,7 @@ def filter_window(window, epsilon=0.1):
     return keep_mask
 
 
-def filter_data(df, window_size=10, epsilon=0.1):
+def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
     """
     Filter data by applying window-based filtering.
     
@@ -83,6 +89,8 @@ def filter_data(df, window_size=10, epsilon=0.1):
         df (pandas.DataFrame): Data to filter
         window_size (int): Size of the window for filtering
         epsilon (float): Tolerance as a percentage
+        target_column (str, optional): Specific column to filter. If provided, only this column will be filtered
+                                      and rows will only be dropped if this column contains null values.
         
     Returns:
         pandas.DataFrame: Filtered data
@@ -101,15 +109,25 @@ def filter_data(df, window_size=10, epsilon=0.1):
         
         total_windows += 1
         
-        keep_mask = filter_window(window, epsilon)
+        keep_mask = filter_window(window, epsilon, target_column)
         
-        for col in window.columns:
-            if col in keep_mask.columns:
-                total_cells += len(window[col])
-                nullified_values = (~keep_mask[col]).sum()
+        # For single column analysis, only operate on that column
+        if target_column:
+            if target_column in keep_mask.columns:
+                total_cells += len(window[target_column])
+                nullified_values = (~keep_mask[target_column]).sum()
                 nullified_cells += nullified_values
                 
-                filtered_df.loc[window.index[~keep_mask[col]], col] = np.nan
+                filtered_df.loc[window.index[~keep_mask[target_column]], target_column] = np.nan
+        else:
+            # For multiple column analysis, operate on all columns
+            for col in window.columns:
+                if col in keep_mask.columns:
+                    total_cells += len(window[col])
+                    nullified_values = (~keep_mask[col]).sum()
+                    nullified_cells += nullified_values
+                    
+                    filtered_df.loc[window.index[~keep_mask[col]], col] = np.nan
     
     return filtered_df
 
@@ -162,7 +180,7 @@ def savgol_filter(data, window_size, poly_order):
     return signal.savgol_filter(data, window_size, poly_order)
 
 
-def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_order=2, keep_noise_only=True):
+def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_order=2, keep_noise_only=True, target_column=None):
     """
     Extract noise from signals using various filtering methods.
     
@@ -174,6 +192,7 @@ def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_ord
         fs (float): Sampling frequency for Butterworth filter
         poly_order (int): Polynomial order for Savitzky-Golay filter
         keep_noise_only (bool): If True, return only the noise component
+        target_column (str, optional): Specific column to extract noise from. If provided, only this column will be processed.
         
     Returns:
         pandas.DataFrame: Data with extracted noise signals
@@ -183,8 +202,11 @@ def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_ord
     # clean the data just in case
     df.dropna(inplace=True)
     
+    # Select columns to process
+    columns_to_process = [target_column] if target_column and target_column in df.columns else df.columns
+    
     # noise extraction on each column
-    for column in df.columns:
+    for column in columns_to_process:
         if column == 'timestamp' or column == 'date':
             noise_signals[column] = df[column]
             continue

@@ -8,7 +8,7 @@ import argparse
 import joblib
 import os
 from preprocessor import load_data as prep_load_data
-from preprocessor import filter_data, extract_noise_signal
+from preprocessor import filter_data
 
 def load_data(file_path):
     """Load and preprocess the CSV file using preprocessor functions."""
@@ -40,8 +40,14 @@ def extract_features(signal):
         'std_perc': std_perc,
     }
 
-def extract_window_features(df, window_size=10):
+def extract_window_features(df, window_size=10, target_column=None):
     """Extract features from a sliding window of the data with preprocessing."""
+    # Validate target_column exists in data
+    if target_column and target_column not in df.columns:
+        print(f"Error: Specified column '{target_column}' not found in data.")
+        print(f"Available columns: {', '.join(df.columns)}")
+        return pd.DataFrame(), []
+        
     measurement_types = {
         'current': ['C1', 'C2', 'C3'],
         'voltage': ['V1', 'V2', 'V3'],
@@ -53,7 +59,7 @@ def extract_window_features(df, window_size=10):
     feature_names = [] 
     
     epsilon = 0.08 
-    filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon)
+    filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon, target_column=target_column)
     
     for i in range(0, len(filtered_df), window_size//2):  # 50% overlap
         window = filtered_df.iloc[i:i+window_size].copy()
@@ -74,18 +80,32 @@ def extract_window_features(df, window_size=10):
             
         window_features = {}
         
-        for category, columns in measurement_types.items():
-            for col in columns:
-                if col in filtered_df.columns:
-                    signal = window[col].values  
-                    if len(signal) > 0:
-                        features = extract_features(signal)
-                        if features:
-                            for fname, fval in features.items():
-                                feature_name = f"{col}_{fname}"
-                                window_features[feature_name] = fval
-                                if feature_name not in feature_names:
-                                    feature_names.append(feature_name)
+        # If target_column is specified, only analyze that column
+        if target_column:
+            if target_column in filtered_df.columns:
+                signal = window[target_column].values
+                if len(signal) > 0:
+                    features = extract_features(signal)
+                    if features:
+                        for fname, fval in features.items():
+                            feature_name = f"{target_column}_{fname}"
+                            window_features[feature_name] = fval
+                            if feature_name not in feature_names:
+                                feature_names.append(feature_name)
+        else:
+            # Otherwise, analyze all columns by category
+            for category, columns in measurement_types.items():
+                for col in columns:
+                    if col in filtered_df.columns:
+                        signal = window[col].values  
+                        if len(signal) > 0:
+                            features = extract_features(signal)
+                            if features:
+                                for fname, fval in features.items():
+                                    feature_name = f"{col}_{fname}"
+                                    window_features[feature_name] = fval
+                                    if feature_name not in feature_names:
+                                        feature_names.append(feature_name)
         
         if window_features:
             all_features.append(window_features)
@@ -117,7 +137,7 @@ def plot_feature_importance(importance_df, title="Feature Importance"):
     plt.savefig('feature_importance.png')
     plt.close()
 
-def train_svm(training_files, labels):
+def train_svm(training_files, labels, target_column=None):
     """Train SVM classifier on multiple files."""
     all_features = []
     all_labels = []
@@ -126,7 +146,7 @@ def train_svm(training_files, labels):
     for file_path, label in zip(training_files, labels):
         df = load_data(file_path)
         if df is not None:
-            features_df, curr_feature_names = extract_window_features(df)
+            features_df, curr_feature_names = extract_window_features(df, target_column=target_column)
             if not features_df.empty:
                 all_features.append(features_df)
                 all_labels.extend([label] * len(features_df))
@@ -160,31 +180,34 @@ def train_svm(training_files, labels):
     
     return svm, scaler, feature_names
 
-def analyze_file(file_path, svm, scaler, feature_names):
+def analyze_file(file_path, svm, scaler, feature_names, target_column=None):
     """Analyze a single file using trained SVM."""
     df = load_data(file_path)
     if df is None:
         return None
         
-    features_df, extracted_feature_names = extract_window_features(df)
+    features_df, extracted_feature_names = extract_window_features(df, target_column=target_column)
     if features_df.empty:
         return None
         
     # Handle NaN values
     features_df = features_df.fillna(0)
     
-    aligned_features = pd.DataFrame(index=features_df.index)
-    
-    for feature in feature_names:
-        if feature in features_df.columns:
-            aligned_features[feature] = features_df[feature]
-        else:
-            aligned_features[feature] = 0
-            print(f"Warning: Feature '{feature}' not found in analysis data, using zeros.")
-    
+    # Check if any required features are missing
     missing_features = [f for f in feature_names if f not in features_df.columns]
     if missing_features:
-        print(f"Warning: {len(missing_features)} features used in training were not found in analysis data.")
+        print(f"Error: {len(missing_features)} features used in training were not found in analysis data:")
+        for feature in missing_features[:5]:  # Print first 5 missing features for clarity
+            print(f"  - Missing feature: '{feature}'")
+        if len(missing_features) > 5:
+            print(f"  - ... and {len(missing_features) - 5} more")
+        print("\nAnalysis cannot proceed. Please ensure you're using the same column(s) for analysis as used in training.")
+        return None
+        
+    # Create aligned features dataframe with same structure as training data
+    aligned_features = pd.DataFrame(index=features_df.index)
+    for feature in feature_names:
+        aligned_features[feature] = features_df[feature]
     
     # Scale features
     X_scaled = scaler.transform(aligned_features)
@@ -209,6 +232,7 @@ def main():
     parser.add_argument('--real', '-r', nargs='*', help='List of real data files for training')
     parser.add_argument('--simulated', '-s', nargs='*', help='List of simulated data files for training')
     parser.add_argument('--model', '-m', default='svm_model.joblib', help='Path to save/load model')
+    parser.add_argument('--column', '-c', help='Specific column to analyze (e.g., V1, C2, frequency)')
     args = parser.parse_args()
     
     if args.mode == 'train':
@@ -221,11 +245,20 @@ def main():
         labels = [1] * len(args.real) + [0] * len(args.simulated)
         
         # Train model
-        svm, scaler, feature_names = train_svm(training_files, labels)
+        if args.column:
+            print(f"Training model using only column: {args.column}")
+            model_suffix = f"_{args.column}"
+            svm, scaler, feature_names = train_svm(training_files, labels, target_column=args.column)
+        else:
+            print("Training model using all columns")
+            model_suffix = ""
+            svm, scaler, feature_names = train_svm(training_files, labels)
+            
         if svm is not None:
-            # Save model
-            joblib.dump((svm, scaler, feature_names), args.model)
-            print(f"\nModel saved to {args.model}")
+            # Save model with the original model name
+            model_path = args.model
+            joblib.dump((svm, scaler, feature_names, args.column), model_path)
+            print(f"\nModel saved to {model_path}")
             print("Feature importance plot saved as 'feature_importance.png'")
     
     elif args.mode == 'analyze':
@@ -234,9 +267,24 @@ def main():
             return
             
         # Load model
-        svm, scaler, feature_names = joblib.load(args.model)
+        model_data = joblib.load(args.model)
         
-        results = analyze_file(args.input, svm, scaler, feature_names)
+        # Check if the model includes target_column information (for backward compatibility)
+        if len(model_data) == 4:
+            svm, scaler, feature_names, trained_column = model_data
+        else:
+            svm, scaler, feature_names = model_data
+            trained_column = None
+            
+        # Use command line column if specified, otherwise use the column the model was trained on
+        target_column = args.column if args.column else trained_column
+        
+        if target_column:
+            print(f"Analyzing only column: {target_column}")
+        else:
+            print("Analyzing all columns")
+            
+        results = analyze_file(args.input, svm, scaler, feature_names, target_column=target_column)
         if results:
             print("\n=== Analysis Results ===")
             print(f"Classification: {results['classification']}")
@@ -249,6 +297,8 @@ def main():
             simulated_windows = len(window_results) - real_windows
             print(f"Windows classified as real: {real_windows} ({real_windows/len(window_results)*100:.1f}%)")
             print(f"Windows classified as simulated: {simulated_windows} ({simulated_windows/len(window_results)*100:.1f}%)")
+    else:
+            print("\nAnalysis could not be completed. Please check the messages above for details.")
 
 if __name__ == "__main__":
     main()
