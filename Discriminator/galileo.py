@@ -7,13 +7,13 @@ import matplotlib.pyplot as plt
 import argparse
 import joblib
 import os
+from preprocessor import load_data as prep_load_data
+from preprocessor import filter_data, extract_noise_signal
 
 def load_data(file_path):
-    """Load and preprocess the CSV file."""
+    """Load and preprocess the CSV file using preprocessor functions."""
     try:
-        df = pd.read_csv(file_path)
-        if 'timestamp' in df.columns:
-            df['date'] = pd.to_datetime(df['timestamp'])
+        df = prep_load_data(file_path)
         return df
     except Exception as e:
         print(f"Error loading file: {e}")
@@ -24,7 +24,6 @@ def extract_features(signal):
     if len(signal) < 2:
         return None
         
-    # Basic statistics 
     std = np.std(signal)
     mean = np.mean(signal)  
     variance = std ** 2
@@ -32,7 +31,6 @@ def extract_features(signal):
     diff_mean = np.mean(np.abs(diffs)) 
     diff_std = np.std(diffs)
     
-    # Normalized measure (standard deviation as percentage of mean)
     std_perc = (std / mean * 100) if mean != 0 else 0
     diff_std_perc = diff_std / diff_mean if diff_mean != 0 else 0
    
@@ -43,7 +41,7 @@ def extract_features(signal):
     }
 
 def extract_window_features(df, window_size=10):
-    """Extract features from a sliding window of the data."""
+    """Extract features from a sliding window of the data with preprocessing."""
     measurement_types = {
         'current': ['C1', 'C2', 'C3'],
         'voltage': ['V1', 'V2', 'V3'],
@@ -52,19 +50,34 @@ def extract_window_features(df, window_size=10):
     }
     
     all_features = []
-    feature_names = []  # Track feature names
+    feature_names = [] 
     
-    for i in range(0, len(df), window_size//2):  # 50% overlap
-        window = df.iloc[i:i+window_size]
+    epsilon = 0.08 
+    filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon)
+    
+    for i in range(0, len(filtered_df), window_size//2):  # 50% overlap
+        window = filtered_df.iloc[i:i+window_size].copy()
+        
+        # Skip if window is too small
         if len(window) < window_size:
+            continue
+            
+        initial_size = window_size * len(window.columns)
+                
+        window = window.dropna()
+        
+        non_null_count_after = window.count().sum()
+        
+        # Skip window if it has less than 60% of its original data after removing nulls
+        if non_null_count_after < 0.6 * initial_size:
             continue
             
         window_features = {}
         
         for category, columns in measurement_types.items():
             for col in columns:
-                if col in df.columns:
-                    signal = window[col].dropna().values
+                if col in filtered_df.columns:
+                    signal = window[col].values  
                     if len(signal) > 0:
                         features = extract_features(signal)
                         if features:
@@ -84,7 +97,6 @@ def calculate_feature_importance(svm, X, y, feature_names):
     result = permutation_importance(svm, X, y, n_repeats=10, random_state=42)
     importance_scores = result.importances_mean
     
-    # Create DataFrame with feature names and importance scores
     importance_df = pd.DataFrame({
         'Feature': feature_names,
         'Importance': importance_scores
@@ -154,21 +166,32 @@ def analyze_file(file_path, svm, scaler, feature_names):
     if df is None:
         return None
         
-    features_df, _ = extract_window_features(df)
+    features_df, extracted_feature_names = extract_window_features(df)
     if features_df.empty:
         return None
         
     # Handle NaN values
     features_df = features_df.fillna(0)
     
-    # Scale features
-    X_scaled = scaler.transform(features_df)
+    aligned_features = pd.DataFrame(index=features_df.index)
     
-    # Get predictions and probabilities
+    for feature in feature_names:
+        if feature in features_df.columns:
+            aligned_features[feature] = features_df[feature]
+        else:
+            aligned_features[feature] = 0
+            print(f"Warning: Feature '{feature}' not found in analysis data, using zeros.")
+    
+    missing_features = [f for f in feature_names if f not in features_df.columns]
+    if missing_features:
+        print(f"Warning: {len(missing_features)} features used in training were not found in analysis data.")
+    
+    # Scale features
+    X_scaled = scaler.transform(aligned_features)
+    
     predictions = svm.predict(X_scaled)
     probabilities = svm.predict_proba(X_scaled)
     
-    # Get results
     is_real = np.mean(predictions) > 0.5  # 1 for real, 0 for simulated
     confidence = np.mean(np.max(probabilities, axis=1)) * 100
     
