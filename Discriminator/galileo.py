@@ -4,7 +4,6 @@ from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
 import matplotlib.pyplot as plt
-import argparse
 import joblib
 import os
 from preprocessor import load_data as prep_load_data
@@ -225,80 +224,41 @@ def analyze_file(file_path, svm, scaler, feature_names, target_column=None):
         'window_probabilities': probabilities
     }
 
-def main():
-    parser = argparse.ArgumentParser(description='Train or use SVM to discriminate between real and simulated power plant data.')
-    parser.add_argument('mode', choices=['train', 'analyze'], help='Mode of operation')
-    parser.add_argument('--input', '-i', required=True, help='Input file for analysis or directory containing training files')
-    parser.add_argument('--real', '-r', nargs='*', help='List of real data files for training')
-    parser.add_argument('--simulated', '-s', nargs='*', help='List of simulated data files for training')
-    parser.add_argument('--model', '-m', default='svm_model.joblib', help='Path to save/load model')
-    parser.add_argument('--column', '-c', help='Specific column to analyze (e.g., V1, C2, frequency)')
-    args = parser.parse_args()
+def train_and_save_model(training_files, labels, model_path, target_column=None):
+    """Train SVM model and save it to the specified path."""
+    svm, scaler, feature_names = train_svm(training_files, labels, target_column=target_column)
     
-    if args.mode == 'train':
-        if not args.real or not args.simulated:
-            print("Need both real and simulated files for training")
-            return
-            
-        # Prepare training data + labels
-        training_files = args.real + args.simulated
-        labels = [1] * len(args.real) + [0] * len(args.simulated)
-        
-        # Train model
-        if args.column:
-            print(f"Training model using only column: {args.column}")
-            model_suffix = f"_{args.column}"
-            svm, scaler, feature_names = train_svm(training_files, labels, target_column=args.column)
-        else:
-            print("Training model using all columns")
-            model_suffix = ""
-            svm, scaler, feature_names = train_svm(training_files, labels)
-            
-        if svm is not None:
-            # Save model with the original model name
-            model_path = args.model
-            joblib.dump((svm, scaler, feature_names, args.column), model_path)
-            print(f"\nModel saved to {model_path}")
-            print("Feature importance plot saved as 'feature_importance.png'")
+    if svm is not None:
+        joblib.dump((svm, scaler, feature_names, target_column), model_path)
+        print(f"\nModel saved to {model_path}")
+        print("Feature importance plot saved as 'feature_importance.png'")
+        return True
     
-    elif args.mode == 'analyze':
-        if not os.path.exists(args.model):
-            print(f"Model file {args.model} not found")
-            return
-            
-        # Load model
-        model_data = joblib.load(args.model)
-        
-        # Check if the model includes target_column information (for backward compatibility)
-        if len(model_data) == 4:
-            svm, scaler, feature_names, trained_column = model_data
-        else:
-            svm, scaler, feature_names = model_data
-            trained_column = None
-            
-        # Use command line column if specified, otherwise use the column the model was trained on
-        target_column = args.column if args.column else trained_column
-        
-        if target_column:
-            print(f"Analyzing only column: {target_column}")
-        else:
-            print("Analyzing all columns")
-            
-        results = analyze_file(args.input, svm, scaler, feature_names, target_column=target_column)
-        if results:
-            print("\n=== Analysis Results ===")
-            print(f"Classification: {results['classification']}")
-            print(f"Confidence: {results['confidence']}%")
-            
-            window_results = pd.Series(results['window_predictions'])
-            print(f"\nWindow Statistics:")
-            print(f"Total windows analyzed: {len(window_results)}")
-            real_windows = sum(window_results)
-            simulated_windows = len(window_results) - real_windows
-            print(f"Windows classified as real: {real_windows} ({real_windows/len(window_results)*100:.1f}%)")
-            print(f"Windows classified as simulated: {simulated_windows} ({simulated_windows/len(window_results)*100:.1f}%)")
-    else:
-            print("\nAnalysis could not be completed. Please check the messages above for details.")
+    return False
 
-if __name__ == "__main__":
-    main()
+def analyze_with_model(file_path, model_path, target_column=None):
+    """Load model and analyze the specified file."""
+    if not os.path.exists(model_path):
+        print(f"Model file {model_path} not found")
+        return None
+    
+    # Load model
+    model_data = joblib.load(model_path)
+    
+    # Check if the model includes target_column information (for backward compatibility)
+    if len(model_data) == 4:
+        svm, scaler, feature_names, trained_column = model_data
+    else:
+        svm, scaler, feature_names = model_data
+        trained_column = None
+    
+    # Use command line column if specified, otherwise use the column the model was trained on
+    analysis_column = target_column if target_column else trained_column
+    
+    if analysis_column:
+        print(f"Analyzing only column: {analysis_column}")
+    else:
+        print("Analyzing all columns")
+    
+    results = analyze_file(file_path, svm, scaler, feature_names, target_column=analysis_column)
+    return results
