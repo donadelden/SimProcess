@@ -6,6 +6,7 @@ from sklearn.inspection import permutation_importance
 import matplotlib.pyplot as plt
 import joblib
 import os
+from tsfresh.feature_extraction import feature_calculators
 from preprocessor import load_data as prep_load_data
 from preprocessor import filter_data
 
@@ -19,25 +20,28 @@ def load_data(file_path):
         return None
 
 def extract_features(signal):
-    """Extract statistical features from a signal."""
+    """Extract features from a signal."""
     if len(signal) < 2:
         return None
         
-    std = np.std(signal)
-    mean = np.mean(signal)  
-    variance = std ** 2
-    diffs = np.diff(signal)
-    diff_mean = np.mean(np.abs(diffs)) 
-    diff_std = np.std(diffs)
-    
+    std = feature_calculators.standard_deviation(signal)
+    mean = feature_calculators.mean(signal)
+    variance = feature_calculators.variance(signal)    
     std_perc = (std / mean * 100) if mean != 0 else 0
-    diff_std_perc = diff_std / diff_mean if diff_mean != 0 else 0
-   
-    return {
+    skewness = feature_calculators.skewness(signal)
+    approx_entropy = feature_calculators.approximate_entropy(signal,m=2,r=0.1)
+    autocorr = feature_calculators.autocorrelation(signal,lag=1)
+    
+    features = {
         'std': std,
         'variance': variance,
         'std_perc': std_perc,
+        'skewness': skewness,
+        'approx_entropy':approx_entropy,
+        'autocorr':autocorr,
     }
+    
+    return features
 
 def extract_window_features(df, window_size=10, target_column=None):
     """Extract features from a sliding window of the data with preprocessing."""
