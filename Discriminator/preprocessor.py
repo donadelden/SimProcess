@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 import argparse
 import os
+import scipy.signal as signal
 
 
 def load_data(file_path):
@@ -83,6 +84,48 @@ def filter_data(df, window_size=10, epsilon=0.1):
                 filtered_df.loc[window.index[~keep_mask[col]], col] = np.nan
     
     return filtered_df
+
+def moving_average_filter(data, window_size):
+    return np.convolve(data, np.ones(window_size)/window_size, mode='same')
+
+def butterworth_filter(data, cutoff, fs, order=4):
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
+    return signal.filtfilt(b, a, data)
+
+def savgol_filter(data, window_size, poly_order):
+    return signal.savgol_filter(data, window_size, poly_order)
+
+
+def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_order=2, keep_noise_only=True):
+    noise_signals = pd.DataFrame(index=df.index)
+
+    # clean the data just in case
+    df.dropna(inplace=True)
+    
+    # noise extraction on each column
+    for column in df.columns:
+        if column == 'timestamp' or column == 'date':
+            noise_signals[column] = df[column]
+            continue
+        
+        data = df[column].values
+        
+        if filter == 'moving_average':
+            noise_signals[column] = moving_average_filter(data, window_size=window_size)
+        elif filter == 'butterworth':
+            noise_signals[column] = butterworth_filter(data, cutoff=cutoff, fs=fs)
+        elif filter == 'savgol':
+            noise_signals[column] = savgol_filter(data, window_size=window_size, poly_order=poly_order)
+        else:
+            raise ValueError(f"Unknown filter type: {filter}")
+
+        if keep_noise_only:
+            noise_signals[column] = data - noise_signals[column]
+            
+    return noise_signals
+
 
 
 def main():
