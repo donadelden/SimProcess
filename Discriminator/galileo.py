@@ -3,6 +3,8 @@ import numpy as np
 from sklearn.svm import SVC
 from sklearn.preprocessing import StandardScaler
 from sklearn.inspection import permutation_importance
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 import matplotlib.pyplot as plt
 import joblib
 import os
@@ -280,3 +282,284 @@ def analyze_with_model(file_path, model_path, target_column=None):
     
     results = analyze_file(file_path, svm, scaler, feature_names, target_column=analysis_column)
     return results
+
+# New functions for train-test split functionality
+
+def split_features_dataset(features_file, train_ratio=0.8, random_seed=42):
+    """
+    Split a features dataset into training and testing sets.
+    
+    Args:
+        features_file (str): Path to the CSV file containing extracted features
+        train_ratio (float): Ratio of data to use for training
+        random_seed (int): Random seed for reproducibility
+        
+    Returns:
+        tuple: (X_train, X_test, y_train, y_test, feature_names)
+    """
+    print(f"Loading features from {features_file}")
+    try:
+        df = pd.read_csv(features_file)
+    except Exception as e:
+        print(f"Error loading features file: {e}")
+        return None, None, None, None, None
+    
+    print(f"Loaded {len(df)} samples with {len(df.columns)} features")
+    
+    # Check if 'real' column exists
+    if 'real' not in df.columns:
+        print("Error: 'real' column not found in the data")
+        return None, None, None, None, None
+    
+    # Extract features and labels
+    X = df.drop('real', axis=1)
+    y = df['real']
+    
+    # Report class distribution
+    class_counts = y.value_counts()
+    print("\nClass distribution in original data:")
+    for label, count in class_counts.items():
+        print(f"  Class {label}: {count} samples ({count/len(df)*100:.2f}%)")
+    
+    # Split the data
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, train_size=train_ratio, random_state=random_seed, stratify=y
+    )
+    
+    print(f"\nSplit complete:")
+    print(f"  Training set: {len(X_train)} samples ({len(X_train)/len(df)*100:.2f}%)")
+    print(f"  Testing set: {len(X_test)} samples ({len(X_test)/len(df)*100:.2f}%)")
+    
+    # Report class distribution in splits
+    train_class_counts = y_train.value_counts()
+    test_class_counts = y_test.value_counts()
+    
+    print("\nClass distribution in training set:")
+    for label, count in train_class_counts.items():
+        print(f"  Class {label}: {count} samples ({count/len(X_train)*100:.2f}%)")
+    
+    print("\nClass distribution in testing set:")
+    for label, count in test_class_counts.items():
+        print(f"  Class {label}: {count} samples ({count/len(X_test)*100:.2f}%)")
+    
+    feature_names = X.columns.tolist()
+    return X_train, X_test, y_train, y_test, feature_names
+
+def train_model_from_features(X_train, y_train, feature_names, model_path=None):
+    """
+    Train a model on the provided features and save it.
+    
+    Args:
+        X_train (pandas.DataFrame): Training features
+        y_train (pandas.Series): Training labels
+        feature_names (list): List of feature names
+        model_path (str, optional): Path to save the model
+        
+    Returns:
+        tuple: (svm, scaler, feature_names)
+    """
+    # Handle NaN values
+    X_train = X_train.fillna(0)
+    
+    # Scale features
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X_train)
+    
+    # Train SVM
+    print("Training SVM classifier...")
+    svm = SVC(kernel='rbf', probability=True)
+    svm.fit(X_scaled, y_train)
+    
+    # Calculate and plot feature importance
+    importance_df = calculate_feature_importance(svm, X_scaled, y_train, feature_names)
+    plot_feature_importance(importance_df)
+    
+    print("\nTop 10 Most Important Features:")
+    print(importance_df.head(10).to_string(index=False))
+    
+    # Save model if path is provided
+    if model_path:
+        joblib.dump((svm, scaler, feature_names), model_path)
+        print(f"\nModel saved to {model_path}")
+        print("Feature importance plot saved as 'feature_importance.png'")
+    
+    return svm, scaler, feature_names
+
+def evaluate_model(X_test, y_test, svm, scaler, column_name=None, report_file="report.csv", has_noise=0):
+    """
+    Evaluate a trained model on test data.
+    
+    Args:
+        X_test (pandas.DataFrame): Test features
+        y_test (pandas.Series): Test labels
+        svm: Trained SVM model
+        scaler: Trained feature scaler
+        column_name (str, optional): Name of the column being analyzed
+        report_file (str): CSV file to save the evaluation metrics
+        has_noise (int): 1 if noise features were included, 0 otherwise
+        
+    Returns:
+        dict: Evaluation metrics
+    """
+    # Handle NaN values
+    X_test = X_test.fillna(0)
+    
+    # Scale features
+    X_scaled = scaler.transform(X_test)
+    
+    # Make predictions
+    y_pred = svm.predict(X_scaled)
+    y_prob = svm.predict_proba(X_scaled)[:, 1]
+    
+    # Calculate accuracy
+    accuracy = accuracy_score(y_test, y_pred)
+    print(f"Accuracy: {accuracy:.4f}")
+    
+    # Confusion matrix
+    cm = confusion_matrix(y_test, y_pred)
+    print("\nConfusion Matrix:")
+    print(cm)
+    
+    # Extract TP, TN, FP, FN from confusion matrix
+    if cm.shape == (2, 2):
+        tn, fp, fn, tp = cm.ravel()
+        
+        # Calculate rates and metrics
+        accuracy = (tp + tn) / (tp + tn + fp + fn)
+        precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+        recall = tp / (tp + fn) if (tp + fn) > 0 else 0  # True Positive Rate
+        specificity = tn / (tn + fp) if (tn + fp) > 0 else 0  # True Negative Rate
+        false_positive_rate = fp / (fp + tn) if (fp + tn) > 0 else 0
+        false_negative_rate = fn / (fn + tp) if (fn + tp) > 0 else 0
+        f1 = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+        
+        print("\nDetailed Confusion Matrix Metrics:")
+        print(f"True Negatives (TN): {tn} ({tn/(tp+tn+fp+fn)*100:.2f}%) - Correctly classified as not real")
+        print(f"False Positives (FP): {fp} ({fp/(tp+tn+fp+fn)*100:.2f}%) - Incorrectly classified as real")
+        print(f"False Negatives (FN): {fn} ({fn/(tp+tn+fp+fn)*100:.2f}%) - Incorrectly classified as not real")
+        print(f"True Positives (TP): {tp} ({tp/(tp+tn+fp+fn)*100:.2f}%) - Correctly classified as real")
+        
+        print("\nPerformance Metrics:")
+        print(f"Accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
+        print(f"Precision: {precision:.4f} ({precision*100:.2f}%)")
+        print(f"Recall (TPR): {recall:.4f} ({recall*100:.2f}%)")
+        print(f"Specificity (TNR): {specificity:.4f} ({specificity*100:.2f}%)")
+        print(f"False Positive Rate: {false_positive_rate:.4f} ({false_positive_rate*100:.2f}%)")
+        print(f"False Negative Rate: {false_negative_rate:.4f} ({false_negative_rate*100:.2f}%)")
+        print(f"F1 Score: {f1:.4f}")
+        
+        # Save metrics to CSV report file
+        import os
+        import csv
+        
+        total_windows = len(y_test)
+        real_windows = int(sum(y_test))
+        simulated_windows = total_windows - real_windows
+        
+        # Prepare the row to append
+        metrics_row = {
+            'column': column_name or "unknown",
+            'f1score': f1,
+            'precision': precision,
+            'accuracy': accuracy,
+            'TPR': recall,
+            'TNR': specificity,
+            'FPR': false_positive_rate,
+            'FNR': false_negative_rate,
+            'total_windows': total_windows,
+            'real_windows': real_windows,
+            'simulated_windows': simulated_windows,
+            'has_noise': has_noise
+        }
+        
+        # Check if report file exists
+        file_exists = os.path.isfile(report_file)
+        
+        # Write header or append to file
+        with open(report_file, mode='a', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=metrics_row.keys())
+            if not file_exists:
+                writer.writeheader()
+            writer.writerow(metrics_row)
+        
+        print(f"\nEvaluation metrics appended to {report_file}")
+    
+    # Classification report
+    report = classification_report(y_test, y_pred)
+    print("\nClassification Report:")
+    print(report)
+    
+    # Calculate window statistics similar to analyze_with_model
+    total_windows = len(y_pred)
+    real_windows = sum(y_pred)
+    simulated_windows = total_windows - real_windows
+    
+    print(f"\nWindow Statistics:")
+    print(f"Total windows analyzed: {total_windows}")
+    print(f"Windows classified as real: {real_windows} ({real_windows/total_windows*100:.1f}%)")
+    print(f"Windows classified as simulated: {simulated_windows} ({simulated_windows/total_windows*100:.1f}%)")
+    
+    return {
+        'accuracy': accuracy,
+        'confusion_matrix': cm,
+        'classification_report': report,
+        'predictions': y_pred,
+        'probabilities': y_prob
+    }
+
+def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=42, skip_evaluation=False, report_file="report.csv"):
+    """
+    Train and evaluate a model using a features file with train-test split.
+    
+    Args:
+        features_file (str): Path to the CSV file containing extracted features
+        model_path (str): Path to save the trained model
+        train_ratio (float): Ratio of data to use for training
+        random_seed (int): Random seed for reproducibility
+        skip_evaluation (bool): Whether to skip model evaluation
+        report_file (str): CSV file to save the evaluation metrics
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    # Extract column name from features filename if possible
+    import os
+    file_basename = os.path.basename(features_file)
+    column_name = None
+    has_noise = 0
+    
+    # Try to extract column name from filename pattern like "combined_V1_features.csv"
+    if "_" in file_basename:
+        parts = file_basename.split("_")
+        if len(parts) >= 2:
+            potential_column = parts[1]  # Assume the column name is the second part
+            if potential_column.startswith("V") or potential_column.startswith("C") or potential_column in ["frequency", "power"]:
+                column_name = potential_column
+                
+        # Check if "noise" is in the filename
+        if "noise" in file_basename.lower():
+            has_noise = 1
+    
+    # Split the dataset
+    X_train, X_test, y_train, y_test, feature_names = split_features_dataset(
+        features_file, train_ratio, random_seed
+    )
+    
+    if X_train is None:
+        return False
+    
+    # Alternatively, check feature names for noise features
+    if has_noise == 0 and any("noise_" in feat_name for feat_name in feature_names):
+        has_noise = 1
+    
+    print(f"Detected: column={column_name}, has_noise={has_noise} ({'with' if has_noise else 'without'} noise features)")
+    
+    # Train the model
+    svm, scaler, _ = train_model_from_features(X_train, y_train, feature_names, model_path)
+    
+    # Evaluate the model if not skipped
+    if not skip_evaluation:
+        print("\nEvaluating model on test set:")
+        evaluate_model(X_test, y_test, svm, scaler, column_name, report_file, has_noise)
+    
+    return True

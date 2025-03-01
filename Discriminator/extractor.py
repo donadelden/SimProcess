@@ -33,8 +33,7 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         
     # Generate default output filename if not provided
     if output_file is None:
-        noise_suffix = "_with_noise" if extract_noise else ""
-        output_file = f"combined_{target_column}{noise_suffix}_features.csv"
+        output_file = f"combined_{target_column}_features.csv"
     
     # Find all CSV files in the directory
     csv_files = [f for f in os.listdir(data_directory) if f.lower().endswith('.csv')]
@@ -174,7 +173,7 @@ def main():
     parser = argparse.ArgumentParser(description='Extract features from a specified column in CSV files')
     parser.add_argument('--data_dir', '-d', default='data/', help='Directory containing CSV files')
     parser.add_argument('--output', '-o', help='Output CSV file path (default: combined_COLUMN_features.csv)')
-    parser.add_argument('--column', '-c', default='V1', help='Column to extract features from')
+    parser.add_argument('--column', '-c', help='Column to extract features from')
     parser.add_argument('--window', '-w', type=int, default=10, help='Window size for feature extraction')
     
     # Noise extraction arguments
