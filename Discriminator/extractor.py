@@ -153,6 +153,9 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
     # Combine all features into a single DataFrame
     combined_df = pd.concat(all_features, ignore_index=True)
     
+    # Clean the features dataframe
+    combined_df = clean_features_dataframe(combined_df)
+    
     # Count the number of real and not real samples
     real_count = combined_df['real'].sum()
     not_real_count = len(combined_df) - real_count
@@ -167,6 +170,65 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
     print(f"Total features: {len(combined_df.columns) - 1}")  # -1 for the 'real' label column
     
     return True
+
+
+def clean_features_dataframe(combined_df):
+    """
+    Clean up the features dataframe by handling null values, empty strings, and invalid data.
+    
+    Args:
+        combined_df (pandas.DataFrame): The dataframe with extracted features
+        
+    Returns:
+        pandas.DataFrame: Cleaned dataframe
+    """
+    # Make a copy to avoid modifying the original
+    cleaned_df = combined_df.copy()
+    
+    # Replace empty strings with NaN
+    cleaned_df = cleaned_df.replace('', np.nan)
+    
+    # Find columns containing critical statistical measures
+    critical_cols = [col for col in cleaned_df.columns if any(term in col for term in 
+                    ['std', 'variance', 'entropy', 'autocorr', 'kurtosis'])]
+    
+    # If we found any critical columns, filter rows where all these values are near zero
+    if critical_cols:
+        # Identify rows where all critical features are very close to zero
+        all_critical_near_zero = (cleaned_df[critical_cols].abs() < 1e-4).all(axis=1)
+        cleaned_df = cleaned_df[~all_critical_near_zero]
+        print(f"Removed {all_critical_near_zero.sum()} rows where all critical features are near zero")
+    
+    # Replace NaN with 0 for numeric columns
+    numeric_cols = cleaned_df.select_dtypes(include=['float64', 'int64']).columns
+    cleaned_df[numeric_cols] = cleaned_df[numeric_cols].fillna(0)
+    
+    # Check for rows with too many zeros or near-zero values (potential low-quality data)
+    # Consider a row low quality if more than 50% of its features are zero or very close to zero
+    near_zero_values = (cleaned_df[numeric_cols].abs() < 1e-6)
+    zero_percentage = near_zero_values.sum(axis=1) / len(numeric_cols)
+    low_quality_rows = zero_percentage > 0.5
+    
+    # Also check if the row has at least some minimum variance or meaningful features
+    # Flag rows where the first few numeric features are all zeros
+    key_features = numeric_cols[:5]  # First 5 numeric features
+    key_features_zero = (cleaned_df[key_features].abs() < 1e-6).all(axis=1)
+    low_quality_rows = low_quality_rows | key_features_zero
+    
+    # Print information about low quality rows
+    low_quality_count = low_quality_rows.sum()
+    if low_quality_count > 0:
+        print(f"Found {low_quality_count} low quality rows ({low_quality_count/len(cleaned_df)*100:.2f}%)")
+        print("These rows have more than 80% of features as zeros or null values")
+        
+        # Option 1: Remove these rows
+        cleaned_df = cleaned_df[~low_quality_rows]
+        print(f"Removed {low_quality_count} low quality rows")
+        
+        # Option 2: Just report them but keep them
+        # pass
+    
+    return cleaned_df
 
 def main():
     """Main function to run the script."""

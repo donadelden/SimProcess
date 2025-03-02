@@ -22,40 +22,80 @@ def load_data(file_path):
         return None
 
 def extract_features(signal):
-    """Extract features from a signal."""
+    """Extract features from a signal with improved error handling."""
     if len(signal) < 2:
         return None
         
-    std = feature_calculators.standard_deviation(signal)
-    mean = feature_calculators.mean(signal)
-    variance = feature_calculators.variance(signal)    
-    std_perc = (std / mean * 100) if mean != 0 else 0
-    skewness = feature_calculators.skewness(signal)
-    approx_entropy = feature_calculators.approximate_entropy(signal, m=2, r=0.3)
-    autocorr = feature_calculators.autocorrelation(signal,lag=1)
-    kurtosis = feature_calculators.kurtosis(signal)
-    #fourier_entropy = feature_calculators.fourier_entropy(signal, bins=20)
-    lempev = feature_calculators.lempel_ziv_complexity(signal, bins=20)
-    longest_above_mean = feature_calculators.longest_strike_above_mean(signal)
-    longest_below_mean = feature_calculators.longest_strike_below_mean(signal)
-    n_peaks = feature_calculators.number_peaks(signal, n=1)
-    permutation_entropy = feature_calculators.permutation_entropy(signal, tau=1, dimension=4)
-
-    features = {
-        'std': std,
-        'variance': variance,
-        'std_perc': std_perc,
-        'skewness': skewness,
-        'approx_entropy':approx_entropy,
-        'autocorr':autocorr,
-        'kurtosis':kurtosis,
-        #'fourier_entropy':fourier_entropy,
-        'lempev':lempev,
-        'longest_above_mean':longest_above_mean,
-        'longest_below_mean':longest_below_mean,
-        'n_peaks':n_peaks,
-        'permutation_entropy':permutation_entropy,
-    }
+    features = {}
+    
+    try:
+        features['std'] = feature_calculators.standard_deviation(signal)
+    except:
+        features['std'] = 0.0
+        
+    try:
+        mean_value = feature_calculators.mean(signal)
+    except:
+        mean_value = 0.0
+        
+    try:
+        features['variance'] = feature_calculators.variance(signal)
+    except:
+        features['variance'] = 0.0
+        
+    # Calculate std_perc with error handling
+    try:
+        std = features['std']
+        features['std_perc'] = (std / mean_value * 100) if mean_value != 0 else 0
+    except:
+        features['std_perc'] = 0.0
+        
+    try:
+        features['skewness'] = feature_calculators.skewness(signal)
+    except:
+        features['skewness'] = 0.0
+    
+    try:
+        features['approx_entropy'] = feature_calculators.approximate_entropy(signal, m=2, r=0.3)
+    except:
+        features['approx_entropy'] = 0.0
+        
+    try:
+        features['autocorr'] = feature_calculators.autocorrelation(signal, lag=1)
+        if pd.isna(features['autocorr']):
+            features['autocorr'] = 0.0
+    except:
+        features['autocorr'] = 0.0
+        
+    try:
+        features['kurtosis'] = feature_calculators.kurtosis(signal)
+    except:
+        features['kurtosis'] = 0.0
+    
+    try:
+        features['lempev'] = feature_calculators.lempel_ziv_complexity(signal, bins=20)
+    except:
+        features['lempev'] = 0.0
+        
+    try:
+        features['longest_above_mean'] = feature_calculators.longest_strike_above_mean(signal)
+    except:
+        features['longest_above_mean'] = 0
+        
+    try:
+        features['longest_below_mean'] = feature_calculators.longest_strike_below_mean(signal)
+    except:
+        features['longest_below_mean'] = 0
+        
+    try:
+        features['n_peaks'] = feature_calculators.number_peaks(signal, n=1)
+    except:
+        features['n_peaks'] = 0
+    
+    try:
+        features['permutation_entropy'] = feature_calculators.permutation_entropy(signal, tau=1, dimension=4)
+    except:
+        features['permutation_entropy'] = 0.0
     
     return features
 
@@ -83,10 +123,29 @@ def extract_window_features(df, window_size=10, target_column=None):
     for i in range(0, len(filtered_df), window_size//2):  # 50% overlap
         window = filtered_df.iloc[i:i+window_size].copy()
         
-        # Skip if window is too small
+         # Skip if window is too small
         if len(window) < window_size:
             continue
-            
+        
+        # Skip windows with insufficient variance in the target column
+        if target_column:
+            if target_column in window.columns:
+                # Check if data has enough variation to be meaningful
+                signal = window[target_column].values
+                # Skip if standard deviation is extremely low (nearly constant signal)
+                if np.std(signal) < 1e-5:
+                    continue
+                # Skip if range is too small (signal barely changes)
+                if np.ptp(signal) < 1e-4:  # ptp = peak to peak
+                    continue
+                # Skip if most values are repeated (low information content)
+                unique_ratio = len(np.unique(signal)) / len(signal)
+                if unique_ratio < 0.1:  # Less than 10% of values are unique
+                    continue
+                # Skip if signal is mostly zeros
+                if np.mean(signal == 0) > 0.7:  # More than 70% zeros
+                    continue
+
         initial_size = window_size * len(window.columns)
                 
         window = window.dropna()

@@ -13,7 +13,7 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     # Step 1: Extract features for this column
     echo "Extracting features..."
-    python3 extractor.py -c "$COLUMN" --no-noise
+    python3 extractor.py -c "$COLUMN"
     
     # Check if extraction was successful
     if [ $? -ne 0 ]; then
