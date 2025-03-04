@@ -27,11 +27,6 @@ def extract_features(signal):
         return None
         
     features = {}
-    
-    try:
-        features['std'] = feature_calculators.standard_deviation(signal)
-    except:
-        features['std'] = 0.0
         
     try:
         mean_value = feature_calculators.mean(signal)
@@ -39,16 +34,17 @@ def extract_features(signal):
         mean_value = 0.0
         
     try:
-        features['variance'] = feature_calculators.variance(signal)
+        variance = feature_calculators.variance(signal)
+        features['variance_ratio'] = (variance / mean_value) if mean_value != 0 else 0
     except:
-        features['variance'] = 0.0
+        features['variance_ratio'] = 0.0
         
     # Calculate std_perc with error handling
     try:
-        std = features['std']
-        features['std_perc'] = (std / mean_value * 100) if mean_value != 0 else 0
+        std =  feature_calculators.standard_deviation(signal)
+        features['std_ratio'] = (std / mean_value) if mean_value != 0 else 0
     except:
-        features['std_perc'] = 0.0
+        features['std_ratio'] = 0.0
         
     try:
         features['skewness'] = feature_calculators.skewness(signal)
@@ -203,8 +199,15 @@ def calculate_feature_importance(svm, X, y, feature_names):
     
     return importance_df
 
-def plot_feature_importance(importance_df, title="Feature Importance"):
-    """Plot feature importance scores."""
+def plot_feature_importance(importance_df, title="Feature Importance", metric_name=None):
+    """
+    Plot feature importance scores and save as SVG with metric name in filename.
+    
+    Args:
+        importance_df (pandas.DataFrame): DataFrame with 'Feature' and 'Importance' columns
+        title (str): Plot title
+        metric_name (str, optional): Name of the metric being analyzed (e.g., 'V1', 'power_real')
+    """
     plt.figure(figsize=(12, 6))
     plt.bar(range(len(importance_df)), importance_df['Importance'])
     plt.xticks(range(len(importance_df)), importance_df['Feature'], rotation=45, ha='right')
@@ -212,7 +215,18 @@ def plot_feature_importance(importance_df, title="Feature Importance"):
     plt.xlabel('Features')
     plt.ylabel('Importance Score')
     plt.tight_layout()
-    plt.savefig('feature_importance.png')
+    
+    # Create filename with metric name if provided
+    if metric_name:
+        filename = f"feature_importance_{metric_name}.svg"
+        title_with_metric = f"Feature Importance - {metric_name}"
+        plt.title(title_with_metric)
+    else:
+        filename = "feature_importance.svg"
+    
+    # Save as SVG
+    plt.savefig(filename, format='svg')
+    print(f"Feature importance plot saved as '{filename}'")
     plt.close()
 
 def train_svm(training_files, labels, target_column=None):
@@ -251,7 +265,9 @@ def train_svm(training_files, labels, target_column=None):
     
     # Calculate feature importance
     importance_df = calculate_feature_importance(svm, X_scaled, y, feature_names)
-    plot_feature_importance(importance_df)
+    
+    # Plot feature importance with metric name
+    plot_feature_importance(importance_df, metric_name=target_column)
     
     print("\nTop 10 Most Important Features:")
     print(importance_df.head(10).to_string(index=False))
@@ -404,7 +420,7 @@ def split_features_dataset(features_file, train_ratio=0.8, random_seed=42):
     feature_names = X.columns.tolist()
     return X_train, X_test, y_train, y_test, feature_names
 
-def train_model_from_features(X_train, y_train, feature_names, model_path=None):
+def train_model_from_features(X_train, y_train, feature_names, model_path=None, metric_name=None):
     """
     Train a model on the provided features and save it.
     
@@ -413,6 +429,7 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None):
         y_train (pandas.Series): Training labels
         feature_names (list): List of feature names
         model_path (str, optional): Path to save the model
+        metric_name (str, optional): Name of the metric being analyzed
         
     Returns:
         tuple: (svm, scaler, feature_names)
@@ -431,16 +448,21 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None):
     
     # Calculate and plot feature importance
     importance_df = calculate_feature_importance(svm, X_scaled, y_train, feature_names)
-    plot_feature_importance(importance_df)
+    plot_feature_importance(importance_df, metric_name=metric_name)
     
     print("\nTop 10 Most Important Features:")
     print(importance_df.head(10).to_string(index=False))
     
     # Save model if path is provided
     if model_path:
-        joblib.dump((svm, scaler, feature_names), model_path)
+        # Store metric_name with the model for later reference
+        joblib.dump((svm, scaler, feature_names, metric_name), model_path)
         print(f"\nModel saved to {model_path}")
-        print("Feature importance plot saved as 'feature_importance.png'")
+        
+        if metric_name:
+            print(f"Feature importance plot saved as 'feature_importance_{metric_name}.svg'")
+        else:
+            print("Feature importance plot saved as 'feature_importance.svg'")
     
     return svm, scaler, feature_names
 
@@ -587,13 +609,28 @@ def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=
     column_name = None
     has_noise = 0
     
-    # Try to extract column name from filename pattern like "combined_V1_features.csv"
+    # Try to extract column name from filename pattern like "combined_V1_features.csv" or "combined_power_real_features.csv"
     if "_" in file_basename:
         parts = file_basename.split("_")
+        
+        # Handle voltage and current columns (V1, V2, V3, C1, C2, C3)
         if len(parts) >= 2:
             potential_column = parts[1]  # Assume the column name is the second part
-            if potential_column.startswith("V") or potential_column.startswith("C") or potential_column in ["frequency", "power"]:
+            if potential_column.startswith("V") or potential_column.startswith("C"):
                 column_name = potential_column
+            elif potential_column == "frequency":
+                column_name = potential_column
+        
+        # Handle power types (power_real, power_apparent, power_effective)
+        if "power" in file_basename:
+            if "power_real" in file_basename:
+                column_name = "power_real"
+            elif "power_apparent" in file_basename:
+                column_name = "power_apparent"
+            elif "power_effective" in file_basename:
+                column_name = "power_effective"
+            elif len(parts) >= 2 and parts[1] == "power":
+                column_name = "power"  # Generic fallback if specific power type not identified
                 
         # Check if "noise" is in the filename
         if "noise" in file_basename.lower():
@@ -614,7 +651,7 @@ def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=
     print(f"Detected: column={column_name}, has_noise={has_noise} ({'with' if has_noise else 'without'} noise features)")
     
     # Train the model
-    svm, scaler, _ = train_model_from_features(X_train, y_train, feature_names, model_path)
+    svm, scaler, _ = train_model_from_features(X_train, y_train, feature_names, model_path, metric_name=column_name)
     
     # Evaluate the model if not skipped
     if not skip_evaluation:
