@@ -7,7 +7,8 @@ from galileo import load_data, extract_window_features, extract_features
 from preprocessor import extract_noise_signal
 
 def process_csv_files(data_directory, output_file=None, target_column='V1', window_size=10, 
-                  extract_noise=True, filter_type='savgol', cutoff=0.1, fs=1.0, poly_order=2):
+                  extract_noise=True, filter_type='savgol', cutoff=0.1, fs=1.0, poly_order=2, 
+                  output_column_prefix=None):
     """
     Process all CSV files in the given directory, extract features from specified column,
     and combine them into a single CSV file.
@@ -22,6 +23,7 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         cutoff (float): Cutoff frequency for Butterworth filter
         fs (float): Sampling frequency for Butterworth filter
         poly_order (int): Polynomial order for Savitzky-Golay filter
+        output_column_prefix (str, optional): Prefix to use for output column names. If None, uses target_column
     
     Returns:
         bool: True if successful, False otherwise
@@ -34,6 +36,12 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
     # Generate default output filename if not provided
     if output_file is None:
         output_file = f"combined_{target_column}_features.csv"
+    
+    # Use target_column as the output column prefix if not specified
+    if output_column_prefix is None:
+        output_column_prefix = target_column
+    else:
+        print(f"Using '{output_column_prefix}' as prefix for feature names instead of '{target_column}'")
     
     # Find all CSV files in the directory
     csv_files = [f for f in os.listdir(data_directory) if f.lower().endswith('.csv')]
@@ -73,6 +81,19 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
             print(f"  No features extracted from {file_name}")
             continue
             
+        # Rename columns if a different output column prefix is specified
+        if output_column_prefix != target_column:
+            # Create a mapping for column renaming
+            rename_map = {}
+            for col in features_df.columns:
+                if col.startswith(target_column + '_'):
+                    new_col = col.replace(target_column + '_', output_column_prefix + '_', 1)
+                    rename_map[col] = new_col
+            
+            # Rename columns
+            if rename_map:
+                features_df = features_df.rename(columns=rename_map)
+        
         # Extract noise features if requested
         if extract_noise:
             noise_features = []
@@ -116,7 +137,8 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
                     noise_feature_dict = extract_features(noise_signal)
                     if noise_feature_dict:
                         # Add 'noise_' prefix to feature names
-                        noise_feature_dict = {f"noise_{k}": v for k, v in noise_feature_dict.items()}
+                        # If output_column_prefix is different from target_column, use it for noise features too
+                        noise_feature_dict = {f"noise_{output_column_prefix}_{k}": v for k, v in noise_feature_dict.items()}
                         noise_features.append(noise_feature_dict)
             
             # If we have noise features, create a DataFrame and align with original features
@@ -143,7 +165,7 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         # Add to the collection
         all_features.append(features_df)
         
-        print(f"  Extracted {len(features_df)} windows with {len(feature_names)} features")
+        print(f"  Extracted {len(features_df)} windows with {len(features_df.columns) - 1} features")
     
     # Check if we have any features
     if not all_features:
@@ -237,6 +259,7 @@ def main():
     parser.add_argument('--output', '-o', help='Output CSV file path (default: combined_COLUMN_features.csv)')
     parser.add_argument('--column', '-c', help='Column to extract features from')
     parser.add_argument('--window', '-w', type=int, default=10, help='Window size for feature extraction')
+    parser.add_argument('--rename', '-r', help='Rename the column prefix in output features (default: use the --column value)')
     
     # Noise extraction arguments
     parser.add_argument('--no-noise', action='store_true', help='Disable noise feature extraction')
@@ -257,7 +280,8 @@ def main():
         args.filter,
         args.cutoff,
         args.fs,
-        args.poly_order
+        args.poly_order,
+        args.rename  # Pass the rename parameter to the function
     )
 
 if __name__ == "__main__":
