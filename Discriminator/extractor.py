@@ -134,7 +134,8 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
                 # Extract features from the noise signal
                 noise_signal = noise_df[target_column].values
                 if len(noise_signal) > 1:
-                    noise_feature_dict = extract_features(noise_signal)
+                    # Explicitly indicate this is a noise signal
+                    noise_feature_dict = extract_features(noise_signal, is_noise=True)
                     if noise_feature_dict:
                         # Add 'noise_' prefix to feature names
                         # If output_column_prefix is different from target_column, use it for noise features too

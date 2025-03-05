@@ -21,77 +21,140 @@ def load_data(file_path):
         print(f"Error loading file: {e}")
         return None
 
-def extract_features(signal):
-    """Extract features from a signal with improved error handling."""
+def extract_features(signal, is_noise=False):
+    """
+    Extract features from a signal with improved error handling.
+    
+    Args:
+        signal: The signal data to extract features from
+        is_noise: Boolean indicating if the signal is noise data
+        
+    Returns:
+        dict: Dictionary of extracted features
+    """
     if len(signal) < 2:
         return None
         
     features = {}
-        
-    try:
-        mean_value = feature_calculators.mean(signal)
-    except:
-        mean_value = 0.0
-        
-    try:
-        variance = feature_calculators.variance(signal)
-        features['variance_ratio'] = (variance / mean_value) if mean_value != 0 else 0
-    except:
-        features['variance_ratio'] = 0.0
-        
-    # Calculate std_perc with error handling
-    try:
-        std =  feature_calculators.standard_deviation(signal)
-        features['std_ratio'] = (std / mean_value) if mean_value != 0 else 0
-    except:
-        features['std_ratio'] = 0.0
-        
-    try:
-        features['skewness'] = feature_calculators.skewness(signal)
-    except:
-        features['skewness'] = 0.0
     
-    try:
-        features['approx_entropy'] = feature_calculators.approximate_entropy(signal, m=2, r=0.3)
-    except:
-        features['approx_entropy'] = 0.0
+    if is_noise:
+        # Extract noise-specific features
+        try:
+            features['standard_deviation'] = feature_calculators.standard_deviation(signal)
+        except:
+            features['standard_deviation'] = 0.0
         
-    try:
-        features['autocorr'] = feature_calculators.autocorrelation(signal, lag=1)
-        if pd.isna(features['autocorr']):
+        try:
+            features['variance'] = feature_calculators.variance(signal)
+        except:
+            features['variance'] = 0.0
+            
+        try:
+            features['minimum'] = feature_calculators.minimum(signal)
+        except:
+            features['minimum'] = 0.0
+            
+        try:
+            features['absolute_maximum'] = feature_calculators.absolute_maximum(signal)
+        except:
+            features['absolute_maximum'] = 0.0
+            
+        try:
+            features['mean_abs_change'] = feature_calculators.mean_abs_change(signal)
+        except:
+            features['mean_abs_change'] = 0.0
+            
+        try:
+            features['root_mean_square'] = feature_calculators.root_mean_square(signal)
+        except:
+            features['root_mean_square'] = 0.0
+            
+        try:
+            features['absolute_sum_of_changes'] = feature_calculators.absolute_sum_of_changes(signal)
+        except:
+            features['absolute_sum_of_changes'] = 0.0
+            
+        # More complex tsfresh features
+        try:
+            features['value__change_quantiles__mean_0_0_0_6'] = feature_calculators.change_quantiles(signal, ql=0.0, qh=0.6, isabs=True, f_agg="mean")
+        except:
+            features['value__change_quantiles__mean_0_0_0_6'] = 0.0
+            
+        try:
+            features['value__change_quantiles__var_0_0_1_0'] = feature_calculators.change_quantiles(signal, ql=0.0, qh=1.0, isabs=False, f_agg="var")
+        except:
+            features['value__change_quantiles__var_0_0_1_0'] = 0.0
+            
+        try:
+            features['value__fft_coefficient__abs_1'] = feature_calculators.fft_coefficient(signal, param=[{"coeff": 1, "attr": "abs"}])[0][1]
+        except:
+            features['value__fft_coefficient__abs_1'] = 0.0
+    else:
+        # Original features for non-noise data
+        try:
+            mean_value = feature_calculators.mean(signal)
+        except:
+            mean_value = 0.0
+            
+        try:
+            variance = feature_calculators.variance(signal)
+            features['variance_ratio'] = (variance / mean_value) if mean_value != 0 else 0
+        except:
+            features['variance_ratio'] = 0.0
+            
+        # Calculate std_perc with error handling
+        try:
+            std = feature_calculators.standard_deviation(signal)
+            features['std_ratio'] = (std / mean_value) if mean_value != 0 else 0
+        except:
+            features['std_ratio'] = 0.0
+            
+        try:
+            features['skewness'] = feature_calculators.skewness(signal)
+        except:
+            features['skewness'] = 0.0
+        
+        try:
+            features['approx_entropy'] = feature_calculators.approximate_entropy(signal, m=2, r=0.3)
+        except:
+            features['approx_entropy'] = 0.0
+            
+        try:
+            features['autocorr'] = feature_calculators.autocorrelation(signal, lag=1)
+            if pd.isna(features['autocorr']):
+                features['autocorr'] = 0.0
+        except:
             features['autocorr'] = 0.0
-    except:
-        features['autocorr'] = 0.0
+            
+        try:
+            features['kurtosis'] = feature_calculators.kurtosis(signal)
+        except:
+            features['kurtosis'] = 0.0
         
-    try:
-        features['kurtosis'] = feature_calculators.kurtosis(signal)
-    except:
-        features['kurtosis'] = 0.0
-    
-    try:
-        features['lempev'] = feature_calculators.lempel_ziv_complexity(signal, bins=20)
-    except:
-        features['lempev'] = 0.0
+        try:
+            features['lempev'] = feature_calculators.lempel_ziv_complexity(signal, bins=20)
+        except:
+            features['lempev'] = 0.0
+            
+        try:
+            features['longest_above_mean'] = feature_calculators.longest_strike_above_mean(signal)
+        except:
+            features['longest_above_mean'] = 0
+            
+        try:
+            features['longest_below_mean'] = feature_calculators.longest_strike_below_mean(signal)
+        except:
+            features['longest_below_mean'] = 0
+            
+        try:
+            features['n_peaks'] = feature_calculators.number_peaks(signal, n=1)
+        except:
+            features['n_peaks'] = 0
         
-    try:
-        features['longest_above_mean'] = feature_calculators.longest_strike_above_mean(signal)
-    except:
-        features['longest_above_mean'] = 0
-        
-    try:
-        features['longest_below_mean'] = feature_calculators.longest_strike_below_mean(signal)
-    except:
-        features['longest_below_mean'] = 0
-        
-    try:
-        features['n_peaks'] = feature_calculators.number_peaks(signal, n=1)
-    except:
-        features['n_peaks'] = 0
-    
-    try:
-        features['permutation_entropy'] = feature_calculators.permutation_entropy(signal, tau=1, dimension=4)
-    except:
-        features['permutation_entropy'] = 0.0
+        try:
+            features['permutation_entropy'] = feature_calculators.permutation_entropy(signal, tau=1, dimension=4)
+        except:
+            features['permutation_entropy'] = 0.0
     
     return features
 
@@ -159,7 +222,11 @@ def extract_window_features(df, window_size=10, target_column=None):
             if target_column in filtered_df.columns:
                 signal = window[target_column].values
                 if len(signal) > 0:
-                    features = extract_features(signal)
+                    # Determine if the signal is noise
+                    # A simple approach is to check if the column name includes "noise"
+                    is_noise = "noise" in target_column.lower()
+                    
+                    features = extract_features(signal, is_noise=is_noise)
                     if features:
                         for fname, fval in features.items():
                             feature_name = f"{target_column}_{fname}"
@@ -173,7 +240,10 @@ def extract_window_features(df, window_size=10, target_column=None):
                     if col in filtered_df.columns:
                         signal = window[col].values  
                         if len(signal) > 0:
-                            features = extract_features(signal)
+                            # Determine if the signal is noise
+                            is_noise = "noise" in col.lower()
+                            
+                            features = extract_features(signal, is_noise=is_noise)
                             if features:
                                 for fname, fval in features.items():
                                     feature_name = f"{col}_{fname}"
