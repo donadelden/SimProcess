@@ -73,14 +73,12 @@ def simulate_measurements(net, timestamp, add_noise=False, freq=50.0, voltage=24
         vm_pu = net.res_bus.vm_pu[bus]
         t = timestamp.timestamp()
         
-        daily_var = np.sin(2 * np.pi * t / (24 * 3600)) * 0.1
-        hourly_var = np.sin(2 * np.pi * t / 3600) * 0.05
-        fast_var = np.sin(2 * np.pi * t / 300) * 0.02
+        noise = np.random.normal(0, 0.002)
         
-        load_variation = 1.0 + daily_var + hourly_var + fast_var
+        load_variation = 1.0 + noise
         
         base_voltage = voltage
-        voltage_variation = vm_pu * (1 + np.sin(2 * np.pi * t / 600) * 0.01)
+        voltage_variation = 1.0 + np.random.normal(0, 0.001)
         
         angle_1 = 0 + (normal(0, 0.5) if add_noise else 0)
         angle_2 = -120 + (normal(0, 0.5) if add_noise else 0)
