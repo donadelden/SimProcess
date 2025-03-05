@@ -35,7 +35,6 @@ class PowerPlantSim(mosaik_api.Simulator):
         self.step_size = None
         self._count = 0
         self.add_noise = add_noise
-        # Add new default parameters
         self.base_voltage = 245.0
         self.base_current = 20.0
         self.base_frequency = 50.0
@@ -64,14 +63,12 @@ class PowerPlantSim(mosaik_api.Simulator):
         return entities
 
     def _calculate_variations(self, t):
-        daily_var = np.sin(2 * np.pi * t / (24 * 3600)) * 0.1
-        hourly_var = np.sin(2 * np.pi * t / 3600) * 0.05
-        fast_var = np.sin(2 * np.pi * t / 300) * 0.02
+        
         if self.add_noise:
-            noise = np.random.normal(0, 0.01)
-            return 1.0 + daily_var + hourly_var + fast_var + noise
-        return 1.0 + daily_var + hourly_var + fast_var
-
+            noise = np.random.normal(0, 0.002)
+            return 1.0 + noise
+        
+        return 1.0
     def _calculate_frequency(self, t, load_variation):
         freq_base = np.sin(2 * np.pi * t / 3600) * 0.02
         freq_load = -0.01 * (load_variation - 1)
@@ -84,22 +81,22 @@ class PowerPlantSim(mosaik_api.Simulator):
         self.time = time
         omega = 2 * math.pi * self.base_frequency
         load_variation = self._calculate_variations(time)
-        voltage_variation = 1.0 + np.sin(2 * np.pi * time / 600) * 0.01
+        voltage_variation = 1.0 + np.random.normal(0, 0.001)
 
         for eid, attrs in self.entities.items():
             if self.add_noise:
-                angle_1 = 0 + np.random.normal(0, 0.5)
-                angle_2 = -120 + np.random.normal(0, 0.5)
-                angle_3 = 120 + np.random.normal(0, 0.5)
+                angle_1 = 0 + np.random.normal(0, 0.1)
+                angle_2 = -120 + np.random.normal(0, 0.1)
+                angle_3 = 120 + np.random.normal(0, 0.1)
             else:
                 angle_1 = 0
                 angle_2 = -120
                 angle_3 = 120
             
             if self.add_noise:
-                v1 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.005))
-                v2 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.005))
-                v3 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.005))
+                v1 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.001))
+                v2 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.001))
+                v3 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.001))
             else:
                 v1 = self.base_voltage * voltage_variation
                 v2 = self.base_voltage * voltage_variation
