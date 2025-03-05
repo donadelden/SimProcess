@@ -8,3 +8,4 @@
 *.zip
 /Discriminator/results
 *.joblib
+*.pth
