@@ -18,7 +18,6 @@ from . import visualization
 from . import extract_command
 from . import train_command
 from . import evaluate_command
-from . import analyze_command
 
 # Version information
 __all__ = [
