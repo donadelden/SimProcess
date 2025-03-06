@@ -1,0 +1,255 @@
+"""
+Data loading and preprocessing functions for the Galileo framework.
+"""
+
+import pandas as pd
+import numpy as np
+import scipy.signal as signal
+import logging
+from galileo.core import DataLoadError, is_numeric_column
+
+logger = logging.getLogger('galileo.data')
+
+def load_data(file_path):
+    """
+    Load a CSV file and convert timestamp to datetime if present.
+    
+    Args:
+        file_path (str): Path to the CSV file
+        
+    Returns:
+        pandas.DataFrame: Loaded data
+        
+    Raises:
+        DataLoadError: If file loading fails
+    """
+    try:
+        df = pd.read_csv(file_path)
+        if 'timestamp' in df.columns:
+            df['date'] = pd.to_datetime(df['timestamp'])
+        return df
+    except Exception as e:
+        logger.error(f"Error loading file {file_path}: {str(e)}")
+        raise DataLoadError(f"Failed to load data from {file_path}: {str(e)}")
+
+
+def filter_window(window, epsilon=0.1, target_column=None):
+    """
+    Filter a window of data by identifying values that are within epsilon of the mean.
+    
+    Args:
+        window (pandas.DataFrame): Window of data to filter
+        epsilon (float): Tolerance as a percentage
+        target_column (str, optional): Specific column to filter. If provided, only this column will be filtered.
+        
+    Returns:
+        pandas.DataFrame: Mask of values to keep
+    """
+    filter_columns = []
+    
+    # If target column is specified, only filter that column
+    if target_column and target_column in window.columns:
+        filter_columns = [target_column]
+    else:
+        # Otherwise, filter all relevant columns
+        if 'frequency' in window.columns:
+            filter_columns.append('frequency')
+        
+        for prefix in ['V', 'C']:
+            for i in range(1, 4):
+                col = f"{prefix}{i}"
+                col_lower = col.lower()
+                matching_cols = [c for c in window.columns if c.lower() == col_lower]
+                if matching_cols:
+                    filter_columns.extend(matching_cols)
+        
+        power_cols = [col for col in window.columns if 'power' in col.lower()]
+        filter_columns.extend(power_cols)
+    
+    filter_columns = [col for col in filter_columns if col in window.columns]
+    filter_columns = [col for col in filter_columns if is_numeric_column(window, col)]
+    
+    if not filter_columns:
+        logger.warning("No valid columns to filter on.")
+        return pd.DataFrame(True, index=window.index, columns=window.columns)
+    
+    keep_mask = pd.DataFrame(True, index=window.index, columns=window.columns)
+    
+    for column in filter_columns:
+        if window[column].isna().all() or (window[column] == 0).all():
+            continue
+            
+        avg = window[column].mean()
+        
+        lower_bound = avg - abs(avg * epsilon)
+        upper_bound = avg + abs(avg * epsilon)
+        
+        within_range = (window[column] >= lower_bound) & (window[column] <= upper_bound)
+        
+        keep_mask[column] = within_range
+    
+    return keep_mask
+
+
+def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
+    """
+    Filter data by applying window-based filtering.
+    
+    Args:
+        df (pandas.DataFrame): Data to filter
+        window_size (int): Size of the window for filtering
+        epsilon (float): Tolerance as a percentage
+        target_column (str, optional): Specific column to filter. If provided, only this column will be filtered
+                                      and rows will only be dropped if this column contains null values.
+        
+    Returns:
+        pandas.DataFrame: Filtered data
+    """
+    filtered_df = df.copy()
+    
+    total_windows = 0
+    total_cells = 0
+    nullified_cells = 0
+    
+    for i in range(0, len(df), window_size):
+        window = df.iloc[i:i+window_size]
+        
+        if len(window) < window_size:
+            continue
+        
+        total_windows += 1
+        
+        keep_mask = filter_window(window, epsilon, target_column)
+        
+        # For single column analysis, only operate on that column
+        if target_column:
+            if target_column in keep_mask.columns:
+                total_cells += len(window[target_column])
+                nullified_values = (~keep_mask[target_column]).sum()
+                nullified_cells += nullified_values
+                
+                filtered_df.loc[window.index[~keep_mask[target_column]], target_column] = np.nan
+        else:
+            # For multiple column analysis, operate on all columns
+            for col in window.columns:
+                if col in keep_mask.columns:
+                    total_cells += len(window[col])
+                    nullified_values = (~keep_mask[col]).sum()
+                    nullified_cells += nullified_values
+                    
+                    filtered_df.loc[window.index[~keep_mask[col]], col] = np.nan
+    
+    logger.info(f"Filtered {nullified_cells}/{total_cells} cells ({nullified_cells/total_cells*100:.2f}%) "
+                f"across {total_windows} windows")
+    
+    return filtered_df
+
+
+def moving_average_filter(data, window_size):
+    """
+    Apply a moving average filter to the data.
+    
+    Args:
+        data (numpy.ndarray): Data to filter
+        window_size (int): Size of the moving window
+        
+    Returns:
+        numpy.ndarray: Filtered data
+    """
+    return np.convolve(data, np.ones(window_size)/window_size, mode='same')
+
+
+def butterworth_filter(data, cutoff, fs, order=4):
+    """
+    Apply a Butterworth low-pass filter to the data.
+    
+    Args:
+        data (numpy.ndarray): Data to filter
+        cutoff (float): Cutoff frequency
+        fs (float): Sampling frequency
+        order (int): Filter order
+        
+    Returns:
+        numpy.ndarray: Filtered data
+    """
+    nyquist = 0.5 * fs
+    normal_cutoff = cutoff / nyquist
+    b, a = signal.butter(order, normal_cutoff, btype='low', analog=False)
+    return signal.filtfilt(b, a, data)
+
+
+def savgol_filter(data, window_size, poly_order):
+    """
+    Apply a Savitzky-Golay filter to the data.
+    
+    Args:
+        data (numpy.ndarray): Data to filter
+        window_size (int): Size of the window
+        poly_order (int): Order of the polynomial
+        
+    Returns:
+        numpy.ndarray: Filtered data
+    """
+    return signal.savgol_filter(data, window_size, poly_order)
+
+
+def extract_noise_signal(df, filter_type='savgol', window_size=5, cutoff=0.1, fs=1.0, 
+                        poly_order=2, keep_noise_only=True, target_column=None):
+    """
+    Extract noise from signals using various filtering methods.
+    
+    Args:
+        df (pandas.DataFrame): Data containing signals
+        filter_type (str): Type of filter to use ('moving_average', 'butterworth', 'savgol')
+        window_size (int): Size of the window for filtering
+        cutoff (float): Cutoff frequency for Butterworth filter
+        fs (float): Sampling frequency for Butterworth filter
+        poly_order (int): Polynomial order for Savitzky-Golay filter
+        keep_noise_only (bool): If True, return only the noise component
+        target_column (str, optional): Specific column to extract noise from. If provided, only this column will be processed.
+        
+    Returns:
+        pandas.DataFrame: Data with extracted noise signals
+    """
+    noise_signals = pd.DataFrame(index=df.index)
+
+    # Clean the data just in case
+    df_clean = df.dropna().copy()
+    
+    if df_clean.empty:
+        logger.warning("No valid data for noise extraction after dropping NA values")
+        return noise_signals
+    
+    # Select columns to process
+    columns_to_process = [target_column] if target_column and target_column in df_clean.columns else df_clean.columns
+    
+    # Noise extraction on each column
+    for column in columns_to_process:
+        if column == 'timestamp' or column == 'date':
+            noise_signals[column] = df_clean[column]
+            continue
+            
+        if not is_numeric_column(df_clean, column):
+            continue
+        
+        data = df_clean[column].values
+        
+        if filter_type == 'moving_average':
+            filtered_signal = moving_average_filter(data, window_size=window_size)
+        elif filter_type == 'butterworth':
+            filtered_signal = butterworth_filter(data, cutoff=cutoff, fs=fs)
+        elif filter_type == 'savgol':
+            # Ensure window_size is odd for savgol
+            if window_size % 2 == 0:
+                window_size += 1
+            filtered_signal = savgol_filter(data, window_size=window_size, poly_order=poly_order)
+        else:
+            logger.error(f"Unknown filter type: {filter_type}")
+            continue
+
+        if keep_noise_only:
+            noise_signals[column] = data - filtered_signal
+        else:
+            noise_signals[column] = filtered_signal
+            
+    return noise_signals
