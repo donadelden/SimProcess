@@ -34,69 +34,277 @@ def extract_features(signal, is_noise=False):
     features = {}
     
     if is_noise:
-        # Extract noise-specific features
+        # Extract all tsfresh minimal features for noise data
+        from tsfresh.feature_extraction.feature_calculators import (
+            # Basic statistics
+            mean, median, standard_deviation, variance, 
+            minimum, maximum, absolute_maximum, absolute_sum_of_changes,
+            mean_change, mean_abs_change, root_mean_square,
+            
+            # Entropy features
+            approximate_entropy, sample_entropy, permutation_entropy,
+            
+            # Complexity measures
+            binned_entropy, lempel_ziv_complexity, 
+            
+            # Peaks and crossings
+            number_crossing_m, number_peaks, longest_strike_above_mean,
+            longest_strike_below_mean,
+            
+            # Auto-correlation features
+            autocorrelation, partial_autocorrelation,
+            
+            # Distribution features
+            skewness, kurtosis, quantile,
+            
+            # Frequency domain
+            fft_coefficient, fft_aggregated,
+            
+            # Statistical tests
+            augmented_dickey_fuller,
+            
+            # Others
+            ratio_beyond_r_sigma, count_above_mean, count_below_mean,
+            energy_ratio_by_chunks, percentage_of_reoccurring_values_to_all_values,
+            percentage_of_reoccurring_datapoints_to_all_datapoints,
+            benford_correlation, time_reversal_asymmetry_statistic
+        )
+        
+        # Basic statistics
         try:
-            features['standard_deviation'] = feature_calculators.standard_deviation(signal)
+            features['mean'] = mean(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate mean: {str(e)}")
+            features['mean'] = 0.0
+            
+        try:
+            features['median'] = median(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate median: {str(e)}")
+            features['median'] = 0.0
+        
+        try:
+            features['standard_deviation'] = standard_deviation(signal)
         except Exception as e:
             logger.debug(f"Failed to calculate standard_deviation: {str(e)}")
             features['standard_deviation'] = 0.0
         
         try:
-            features['variance'] = feature_calculators.variance(signal)
+            features['variance'] = variance(signal)
         except Exception as e:
             logger.debug(f"Failed to calculate variance: {str(e)}")
             features['variance'] = 0.0
             
         try:
-            features['minimum'] = feature_calculators.minimum(signal)
+            features['minimum'] = minimum(signal)
         except Exception as e:
             logger.debug(f"Failed to calculate minimum: {str(e)}")
             features['minimum'] = 0.0
             
         try:
-            features['absolute_maximum'] = feature_calculators.absolute_maximum(signal)
+            features['maximum'] = maximum(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate maximum: {str(e)}")
+            features['maximum'] = 0.0
+            
+        try:
+            features['absolute_maximum'] = absolute_maximum(signal)
         except Exception as e:
             logger.debug(f"Failed to calculate absolute_maximum: {str(e)}")
             features['absolute_maximum'] = 0.0
             
         try:
-            features['mean_abs_change'] = feature_calculators.mean_abs_change(signal)
+            features['absolute_sum_of_changes'] = absolute_sum_of_changes(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate absolute_sum_of_changes: {str(e)}")
+            features['absolute_sum_of_changes'] = 0.0
+            
+        try:
+            features['mean_change'] = mean_change(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate mean_change: {str(e)}")
+            features['mean_change'] = 0.0
+            
+        try:
+            features['mean_abs_change'] = mean_abs_change(signal)
         except Exception as e:
             logger.debug(f"Failed to calculate mean_abs_change: {str(e)}")
             features['mean_abs_change'] = 0.0
             
         try:
-            features['root_mean_square'] = feature_calculators.root_mean_square(signal)
+            features['root_mean_square'] = root_mean_square(signal)
         except Exception as e:
             logger.debug(f"Failed to calculate root_mean_square: {str(e)}")
             features['root_mean_square'] = 0.0
-            
+        
+        # Entropy features
         try:
-            features['absolute_sum_of_changes'] = feature_calculators.absolute_sum_of_changes(signal)
+            features['approx_entropy'] = approximate_entropy(signal, m=2, r=0.3)
         except Exception as e:
-            logger.debug(f"Failed to calculate absolute_sum_of_changes: {str(e)}")
-            features['absolute_sum_of_changes'] = 0.0
-            
-        # More complex tsfresh features
+            logger.debug(f"Failed to calculate approx_entropy: {str(e)}")
+            features['approx_entropy'] = 0.0
+              
         try:
-            features['value__change_quantiles__mean_0_0_0_6'] = feature_calculators.change_quantiles(signal, ql=0.0, qh=0.6, isabs=True, f_agg="mean")
+            features['permutation_entropy'] = permutation_entropy(signal, tau=1, dimension=3)
         except Exception as e:
-            logger.debug(f"Failed to calculate change_quantiles: {str(e)}")
-            features['value__change_quantiles__mean_0_0_0_6'] = 0.0
+            logger.debug(f"Failed to calculate permutation_entropy: {str(e)}")
+            features['permutation_entropy'] = 0.0
             
+        # Complexity measures
         try:
-            features['value__change_quantiles__var_0_0_1_0'] = feature_calculators.change_quantiles(signal, ql=0.0, qh=1.0, isabs=False, f_agg="var")
+            features['binned_entropy'] = binned_entropy(signal, max_bins=10)
         except Exception as e:
-            logger.debug(f"Failed to calculate change_quantiles: {str(e)}")
-            features['value__change_quantiles__var_0_0_1_0'] = 0.0
+            logger.debug(f"Failed to calculate binned_entropy: {str(e)}")
+            features['binned_entropy'] = 0.0
             
         try:
-            features['value__fft_coefficient__abs_1'] = feature_calculators.fft_coefficient(signal, param=[{"coeff": 1, "attr": "abs"}])[0][1]
+            features['lempel_ziv_complexity'] = lempel_ziv_complexity(signal, bins=10)
+        except Exception as e:
+            logger.debug(f"Failed to calculate lempel_ziv_complexity: {str(e)}")
+            features['lempel_ziv_complexity'] = 0.0
+            
+        # Peaks and crossings
+        try:
+            features['number_crossing_m'] = number_crossing_m(signal, m=0)
+        except Exception as e:
+            logger.debug(f"Failed to calculate number_crossing_m: {str(e)}")
+            features['number_crossing_m'] = 0
+            
+        try:
+            features['number_peaks'] = number_peaks(signal, n=1)
+        except Exception as e:
+            logger.debug(f"Failed to calculate number_peaks: {str(e)}")
+            features['number_peaks'] = 0
+            
+        try:
+            features['longest_strike_above_mean'] = longest_strike_above_mean(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate longest_strike_above_mean: {str(e)}")
+            features['longest_strike_above_mean'] = 0
+            
+        try:
+            features['longest_strike_below_mean'] = longest_strike_below_mean(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate longest_strike_below_mean: {str(e)}")
+            features['longest_strike_below_mean'] = 0
+            
+        # Auto-correlation features
+        try:
+            features['autocorrelation_lag1'] = autocorrelation(signal, lag=1)
+            if pd.isna(features['autocorrelation_lag1']):
+                features['autocorrelation_lag1'] = 0.0
+        except Exception as e:
+            logger.debug(f"Failed to calculate autocorrelation: {str(e)}")
+            features['autocorrelation_lag1'] = 0.0
+                        
+        # Distribution features
+        try:
+            features['skewness'] = skewness(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate skewness: {str(e)}")
+            features['skewness'] = 0.0
+            
+        try:
+            features['kurtosis'] = kurtosis(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate kurtosis: {str(e)}")
+            features['kurtosis'] = 0.0
+            
+        try:
+            features['quantile_25'] = quantile(signal, 0.25)
+            features['quantile_75'] = quantile(signal, 0.75)
+        except Exception as e:
+            logger.debug(f"Failed to calculate quantile: {str(e)}")
+            features['quantile_25'] = 0.0
+            features['quantile_75'] = 0.0
+            
+        # Frequency domain features
+        try:
+            # Extract the first few coefficients
+            for i in range(3):
+                for attr in ['real', 'imag', 'abs', 'angle']:
+                    coef = fft_coefficient(signal, [{'coeff': i, 'attr': attr}])
+                    features[f'fft_coeff_{i}_{attr}'] = coef[0][1]
         except Exception as e:
             logger.debug(f"Failed to calculate fft_coefficient: {str(e)}")
-            features['value__fft_coefficient__abs_1'] = 0.0
+            for i in range(3):
+                for attr in ['real', 'imag', 'abs', 'angle']:
+                    features[f'fft_coeff_{i}_{attr}'] = 0.0
+            
+        try:
+            fft_agg = fft_aggregated(signal, ['centroid', 'variance', 'skew', 'kurtosis'])
+            for i, agg in enumerate(['centroid', 'variance', 'skew', 'kurtosis']):
+                features[f'fft_aggregated_{agg}'] = fft_agg[i]
+        except Exception as e:
+            logger.debug(f"Failed to calculate fft_aggregated: {str(e)}")
+            for agg in ['centroid', 'variance', 'skew', 'kurtosis']:
+                features[f'fft_aggregated_{agg}'] = 0.0
+            
+        # Statistical tests
+        try:
+            adf = augmented_dickey_fuller(signal, [{'attr': 'pvalue'}])
+            features['adf_pvalue'] = adf[0][1]
+        except Exception as e:
+            logger.debug(f"Failed to calculate augmented_dickey_fuller: {str(e)}")
+            features['adf_pvalue'] = 0.5  # Default p-value
+            
+        # Others
+        try:
+            features['ratio_beyond_r_sigma_1'] = ratio_beyond_r_sigma(signal, r=1)
+            features['ratio_beyond_r_sigma_2'] = ratio_beyond_r_sigma(signal, r=2)
+            features['ratio_beyond_r_sigma_3'] = ratio_beyond_r_sigma(signal, r=3)
+        except Exception as e:
+            logger.debug(f"Failed to calculate ratio_beyond_r_sigma: {str(e)}")
+            features['ratio_beyond_r_sigma_1'] = 0.0
+            features['ratio_beyond_r_sigma_2'] = 0.0
+            features['ratio_beyond_r_sigma_3'] = 0.0
+            
+        try:
+            features['count_above_mean'] = count_above_mean(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate count_above_mean: {str(e)}")
+            features['count_above_mean'] = 0
+            
+        try:
+            features['count_below_mean'] = count_below_mean(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate count_below_mean: {str(e)}")
+            features['count_below_mean'] = 0
+            
+        try:
+            energy_ratio = energy_ratio_by_chunks(signal, [{'num_segments': 10, 'segment_focus': 0}])
+            features['energy_ratio_by_chunks'] = energy_ratio[0][1]
+        except Exception as e:
+            logger.debug(f"Failed to calculate energy_ratio_by_chunks: {str(e)}")
+            features['energy_ratio_by_chunks'] = 0.0
+            
+        try:
+            features['percentage_reoccurring_values'] = percentage_of_reoccurring_values_to_all_values(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate percentage_of_reoccurring_values_to_all_values: {str(e)}")
+            features['percentage_reoccurring_values'] = 0.0
+            
+        try:
+            features['percentage_reoccurring_datapoints'] = percentage_of_reoccurring_datapoints_to_all_datapoints(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate percentage_of_reoccurring_datapoints_to_all_datapoints: {str(e)}")
+            features['percentage_reoccurring_datapoints'] = 0.0
+            
+        try:
+            features['benford_correlation'] = benford_correlation(signal)
+        except Exception as e:
+            logger.debug(f"Failed to calculate benford_correlation: {str(e)}")
+            features['benford_correlation'] = 0.0
+            
+        try:
+            time_reversal = time_reversal_asymmetry_statistic(signal, lag=1)
+            features['time_reversal_asymmetry'] = time_reversal
+        except Exception as e:
+            logger.debug(f"Failed to calculate time_reversal_asymmetry_statistic: {str(e)}")
+            features['time_reversal_asymmetry'] = 0.0
+            
     else:
-        # Original features for non-noise data
+        # Original features for non-noise data (keep the existing code)
         try:
             mean_value = feature_calculators.mean(signal)
         except Exception as e:
@@ -175,7 +383,6 @@ def extract_features(signal, is_noise=False):
             features['permutation_entropy'] = 0.0
     
     return features
-
 
 def extract_window_features(df, window_size=10, target_column=None):
     """
@@ -284,58 +491,61 @@ def extract_window_features(df, window_size=10, target_column=None):
 
 def clean_features_dataframe(combined_df):
     """
-    Clean up the features dataframe by handling null values, empty strings, and invalid data.
+    Clean up the features dataframe by:
+    1. Dropping columns that contain any NaN values
+    2. Dropping columns where more than 20% of values are zero
     
     Args:
         combined_df (pandas.DataFrame): The dataframe with extracted features
         
     Returns:
-        pandas.DataFrame: Cleaned dataframe
+        pandas.DataFrame: Cleaned dataframe with problematic columns removed
     """
+    import numpy as np
+    import logging
+    
+    logger = logging.getLogger('galileo.features')
+    
     # Make a copy to avoid modifying the original
     cleaned_df = combined_df.copy()
     
-    # Replace empty strings with NaN
-    cleaned_df = cleaned_df.replace('', np.nan)
+    # Get initial column count for reporting
+    initial_column_count = len(cleaned_df.columns)
     
-    # Find columns containing critical statistical measures
-    critical_cols = [col for col in cleaned_df.columns if any(term in col for term in CRITICAL_FEATURES)]
+    # Step 1: Drop columns that contain any NaN values
+    columns_with_nan = cleaned_df.columns[cleaned_df.isna().any()].tolist()
+    if columns_with_nan:
+        cleaned_df = cleaned_df.drop(columns=columns_with_nan)
+        logger.info(f"Dropped {len(columns_with_nan)} columns containing NaN values")
+        logger.debug(f"NaN columns dropped: {columns_with_nan}")
     
-    # If we found any critical columns, filter rows where all these values are near zero
-    if critical_cols:
-        # Identify rows where all critical features are very close to zero
-        all_critical_near_zero = (cleaned_df[critical_cols].abs() < 1e-4).all(axis=1)
-        cleaned_df = cleaned_df[~all_critical_near_zero]
-        logger.info(f"Removed {all_critical_near_zero.sum()} rows where all critical features are near zero")
-    
-    # Replace NaN with 0 for numeric columns
+    # Step 2: Drop columns where more than 20% of values are zero
+    # Get numeric columns only
     numeric_cols = cleaned_df.select_dtypes(include=['float64', 'int64']).columns
-    cleaned_df[numeric_cols] = cleaned_df[numeric_cols].fillna(0)
     
-    # Check for rows with too many zeros or near-zero values (potential low-quality data)
-    # Consider a row low quality if more than 50% of its features are zero or very close to zero
-    near_zero_values = (cleaned_df[numeric_cols].abs() < 1e-6)
-    zero_percentage = near_zero_values.sum(axis=1) / len(numeric_cols)
-    low_quality_rows = zero_percentage > 0.5
+    # Calculate the percentage of zeros in each column
+    zero_percentages = (cleaned_df[numeric_cols] == 0).mean()
     
-    # Also check if the row has at least some minimum variance or meaningful features
-    # Flag rows where the first few numeric features are all zeros
-    key_features = numeric_cols[:5]  # First 5 numeric features
-    key_features_zero = (cleaned_df[key_features].abs() < 1e-6).all(axis=1)
-    low_quality_rows = low_quality_rows | key_features_zero
+    # Find columns where more than 20% of values are zero
+    high_zero_cols = zero_percentages[zero_percentages > 0.2].index.tolist()
     
-    # Print information about low quality rows
-    low_quality_count = low_quality_rows.sum()
-    if low_quality_count > 0:
-        logger.info(f"Found {low_quality_count} low quality rows ({low_quality_count/len(cleaned_df)*100:.2f}%)")
-        logger.info("These rows have more than 80% of features as zeros or null values")
-        
-        # Remove these rows
-        cleaned_df = cleaned_df[~low_quality_rows]
-        logger.info(f"Removed {low_quality_count} low quality rows")
+    if high_zero_cols:
+        cleaned_df = cleaned_df.drop(columns=high_zero_cols)
+        logger.info(f"Dropped {len(high_zero_cols)} columns where >20% of values are zero")
+        logger.debug(f"High-zero columns dropped: {high_zero_cols}")
+    
+    # Preserve the 'real' column if it exists (for classification)
+    if 'real' in combined_df.columns and 'real' not in cleaned_df.columns:
+        cleaned_df['real'] = combined_df['real']
+    
+    # Report final results
+    final_column_count = len(cleaned_df.columns)
+    removed_count = initial_column_count - final_column_count
+    
+    logger.info(f"Feature cleaning complete: Removed {removed_count}/{initial_column_count} columns ({removed_count/initial_column_count:.1%})")
+    logger.info(f"Remaining features: {final_column_count}")
     
     return cleaned_df
-
 
 def process_csv_files(data_directory, output_file=None, target_column='V1', window_size=10, 
                   extract_noise=True, filter_type='savgol', cutoff=0.1, fs=1.0, poly_order=2, 
