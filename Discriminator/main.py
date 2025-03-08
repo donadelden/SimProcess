@@ -1,29 +1,87 @@
+#!/usr/bin/env python3
+"""
+Galileo - Signal Analysis and Classification Framework
+
+A tool for analyzing time series data, extracting features, 
+and classifying signals as real or simulated.
+"""
+
+import sys
 import argparse
-import os
-import galileo
+from galileo.cli import (
+    extract_command, 
+    train_command, 
+    evaluate_command,
+    analyze_command
+)
+
+
+def create_parser():
+    """Create the main argument parser with subcommands."""
+    parser = argparse.ArgumentParser(
+        description="Galileo - Signal Analysis and Classification Framework",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    
+    # Version information
+    parser.add_argument('--version', action='version', version='Galileo v1.0.0')
+    
+    # Create subparsers for different commands
+    subparsers = parser.add_subparsers(dest='command', help='Command to execute')
+    
+    # Extract features command
+    extract_parser = subparsers.add_parser(
+        'extract', 
+        help='Extract features from CSV files'
+    )
+    extract_command.setup_parser(extract_parser)
+    
+    # Train model command
+    train_parser = subparsers.add_parser(
+        'train', 
+        help='Train a classification model'
+    )
+    train_command.setup_parser(train_parser)
+    
+    # Evaluate model command
+    evaluate_parser = subparsers.add_parser(
+        'evaluate', 
+        help='Evaluate a trained model'
+    )
+    evaluate_command.setup_parser(evaluate_parser)
+    
+    # Analyze command
+    analyze_parser = subparsers.add_parser(
+        'analyze',
+        help='Analyze a CSV file using a trained model'
+    )
+    analyze_command.setup_parser(analyze_parser)
+    
+    return parser
+
 
 def main():
-    parser = argparse.ArgumentParser(description='Train or analyze using SVM with train-test split on extracted features.')
-    parser.add_argument('--input', '-i', required=True, help='Input features CSV file for training or file to analyze')
-    parser.add_argument('--model', '-m', default='svm_model.joblib', help='Path to save/load model')
-    parser.add_argument('--column', '-c', help='Specific column to analyze (for analyze mode)')
-    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
-    parser.add_argument('--no-eval', action='store_true', help='Skip model evaluation')
-    
+    """Main entry point for the application."""
+    parser = create_parser()
     args = parser.parse_args()
     
-    # Ensure input is a CSV file
-    if not args.input.lower().endswith('.csv'):
-        print(f"Error: Input file must be a CSV file containing extracted features")
-        return
-        
-    print(f"Training with features file using train-test split: {args.input}")
-    galileo.train_with_features(
-        features_file=args.input,
-        model_path=args.model,
-        train_ratio=0.8,
-        random_seed=args.seed,
-        skip_evaluation=args.no_eval
-    )
+    # If no command is specified, show help
+    if not args.command:
+        parser.print_help()
+        return 1
+    
+    # Dispatch to the appropriate command
+    if args.command == 'extract':
+        return extract_command.run(args)
+    elif args.command == 'train':
+        return train_command.run(args)
+    elif args.command == 'evaluate':
+        return evaluate_command.run(args)
+    elif args.command == 'analyze':
+        return analyze_command.run(args)
+    
+    return 0
+
+
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
