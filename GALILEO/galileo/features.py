@@ -491,61 +491,58 @@ def extract_window_features(df, window_size=10, target_column=None):
 
 def clean_features_dataframe(combined_df):
     """
-    Clean up the features dataframe by:
-    1. Dropping columns that contain any NaN values
-    2. Dropping columns where more than 20% of values are zero
+    Clean up the features dataframe by handling null values, empty strings, and invalid data.
     
     Args:
         combined_df (pandas.DataFrame): The dataframe with extracted features
         
     Returns:
-        pandas.DataFrame: Cleaned dataframe with problematic columns removed
+        pandas.DataFrame: Cleaned dataframe
     """
-    import numpy as np
-    import logging
-    
-    logger = logging.getLogger('galileo.features')
-    
     # Make a copy to avoid modifying the original
     cleaned_df = combined_df.copy()
     
-    # Get initial column count for reporting
-    initial_column_count = len(cleaned_df.columns)
+    # Replace empty strings with NaN
+    cleaned_df = cleaned_df.replace('', np.nan)
     
-    # Step 1: Drop columns that contain any NaN values
-    columns_with_nan = cleaned_df.columns[cleaned_df.isna().any()].tolist()
-    if columns_with_nan:
-        cleaned_df = cleaned_df.drop(columns=columns_with_nan)
-        logger.info(f"Dropped {len(columns_with_nan)} columns containing NaN values")
-        logger.debug(f"NaN columns dropped: {columns_with_nan}")
+    # Find columns containing critical statistical measures
+    critical_cols = [col for col in cleaned_df.columns if any(term in col for term in CRITICAL_FEATURES)]
     
-    # Step 2: Drop columns where more than 20% of values are zero
-    # Get numeric columns only
+    # If we found any critical columns, filter rows where all these values are near zero
+    if critical_cols:
+        # Identify rows where all critical features are very close to zero
+        all_critical_near_zero = (cleaned_df[critical_cols].abs() < 1e-4).all(axis=1)
+        cleaned_df = cleaned_df[~all_critical_near_zero]
+        logger.info(f"Removed {all_critical_near_zero.sum()} rows where all critical features are near zero")
+    
+    # Replace NaN with 0 for numeric columns
     numeric_cols = cleaned_df.select_dtypes(include=['float64', 'int64']).columns
+    cleaned_df[numeric_cols] = cleaned_df[numeric_cols].fillna(0)
     
-    # Calculate the percentage of zeros in each column
-    zero_percentages = (cleaned_df[numeric_cols] == 0).mean()
+    # Check for rows with too many zeros or near-zero values (potential low-quality data)
+    # Consider a row low quality if more than 50% of its features are zero or very close to zero
+    near_zero_values = (cleaned_df[numeric_cols].abs() < 1e-6)
+    zero_percentage = near_zero_values.sum(axis=1) / len(numeric_cols)
+    low_quality_rows = zero_percentage > 0.5
     
-    # Find columns where more than 20% of values are zero
-    high_zero_cols = zero_percentages[zero_percentages > 0.2].index.tolist()
+    # Also check if the row has at least some minimum variance or meaningful features
+    # Flag rows where the first few numeric features are all zeros
+    key_features = numeric_cols[:5]  # First 5 numeric features
+    key_features_zero = (cleaned_df[key_features].abs() < 1e-6).all(axis=1)
+    low_quality_rows = low_quality_rows | key_features_zero
     
-    if high_zero_cols:
-        cleaned_df = cleaned_df.drop(columns=high_zero_cols)
-        logger.info(f"Dropped {len(high_zero_cols)} columns where >20% of values are zero")
-        logger.debug(f"High-zero columns dropped: {high_zero_cols}")
-    
-    # Preserve the 'real' column if it exists (for classification)
-    if 'real' in combined_df.columns and 'real' not in cleaned_df.columns:
-        cleaned_df['real'] = combined_df['real']
-    
-    # Report final results
-    final_column_count = len(cleaned_df.columns)
-    removed_count = initial_column_count - final_column_count
-    
-    logger.info(f"Feature cleaning complete: Removed {removed_count}/{initial_column_count} columns ({removed_count/initial_column_count:.1%})")
-    logger.info(f"Remaining features: {final_column_count}")
+    # Print information about low quality rows
+    low_quality_count = low_quality_rows.sum()
+    if low_quality_count > 0:
+        logger.info(f"Found {low_quality_count} low quality rows ({low_quality_count/len(cleaned_df)*100:.2f}%)")
+        logger.info("These rows have more than 80% of features as zeros or null values")
+        
+        # Remove these rows
+        cleaned_df = cleaned_df[~low_quality_rows]
+        logger.info(f"Removed {low_quality_count} low quality rows")
     
     return cleaned_df
+
 
 def process_csv_files(data_directory, output_file=None, target_column='V1', window_size=10, 
                   extract_noise=True, filter_type='savgol', cutoff=0.1, fs=1.0, poly_order=2, 
@@ -716,7 +713,7 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         combined_df = pd.concat(all_features, ignore_index=True)
         
         # Clean the features dataframe
-        combined_df = clean_features_dataframe(combined_df)
+        #combined_df = clean_features_dataframe(combined_df)
         
         # Count the number of real and not real samples
         real_count = combined_df['real'].sum()
