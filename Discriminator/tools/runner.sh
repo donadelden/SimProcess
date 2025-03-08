@@ -13,8 +13,12 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     # Step 1: Extract features for this column
     echo "Extracting features..."
-    python3 main.py extract -d ../Discriminator/data/ -c "$COLUMN" -w 20
-    
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 60 --no-noise --output dataset_features/window60/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 70 --no-noise --output dataset_features/window70/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 80 --no-noise --output dataset_features/window80/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 90 --no-noise --output dataset_features/window90/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 100 --no-noise --output dataset_features/window100/no_noise/combined_${COLUMN}_features.csv 
+
     # Check if extraction was successful
     if [ $? -ne 0 ]; then
         echo "Error: Feature extraction failed for column $COLUMN"
@@ -23,7 +27,7 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     # Step 2: Run main analysis on the extracted features
     echo "Running analysis..."
-    python3 main.py train -i "combined_${COLUMN}_features.csv" --noise-only
+    #python3 main.py train -i "combined_${COLUMN}_features.csv" --noise-only
     
     # Check if analysis was successful
     if [ $? -ne 0 ]; then

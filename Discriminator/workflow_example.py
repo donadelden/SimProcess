@@ -19,9 +19,9 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger('workflow_example')
 
 # Define parameters
-WINDOW_SIZE = 20
+WINDOW_SIZE = 100
 FILTER_TYPE = "moving_average"
-TARGET_COLUMN = "C1"
+TARGET_COLUMN = "C2"
 DATA_DIR = "dataset/data"
 OUTPUT_DIR = "output"
 
@@ -131,7 +131,7 @@ def step3_analyze_files(model_file):
     # Define files to analyze with their parameters
     files_to_analyze = [
         {
-            "file": "dataset/gan/generated_data.csv",
+            "file": "dataset/gan/generated_data2.csv",
             "column": TARGET_COLUMN,
             "rename": None,
             "output_dir": os.path.join(OUTPUT_DIR, "analysis_gan")
@@ -143,10 +143,28 @@ def step3_analyze_files(model_file):
             "output_dir": os.path.join(OUTPUT_DIR, "analysis_panda")
         },
         {
+            "file": "dataset/data/2Mosaik.csv",
+            "column": TARGET_COLUMN,
+            "rename": None,
+            "output_dir": os.path.join(OUTPUT_DIR, "analysis_mosaik")
+        },
+        {
+            "file": "dataset/data/processed_EPIC4.csv",
+            "column": TARGET_COLUMN,
+            "rename": None,
+            "output_dir": os.path.join(OUTPUT_DIR, "analysis_EPIC")
+        },
+        {
             "file": "dataset/morris/data6.csv",
-            "column": "R1-PM5:I",
+            "column": "R1-PM4:I",
             "rename": TARGET_COLUMN,
             "output_dir": os.path.join(OUTPUT_DIR, "analysis_morris")
+        },
+        {
+            "file": "dataset/morris/data7.csv",
+            "column": "R1-PM4:I",
+            "rename": TARGET_COLUMN,
+            "output_dir": os.path.join(OUTPUT_DIR, "analysis_morris2")
         }
     ]
     
