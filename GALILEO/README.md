@@ -5,10 +5,11 @@ Galileo is a Python framework for analyzing time series data, extracting feature
 ## Features
 
 - **Feature Extraction**: Extract statistical features from time series data
-- **Noise Analysis**: Extract noise features from signals
+- **Noise Analysis**: Extract noise features from signals using various filtering methods
 - **Model Training**: Train SVM models to classify signals
 - **Model Evaluation**: Evaluate model performance with detailed metrics
-- **Visualization**: Generate plots for feature importance and model performance
+- **Model Transfer**: Apply trained models to new datasets (transferability)
+- **Visualization**: Generate plots for feature importance, prediction distribution, and model performance
 - **Command-line Interface**: Unified CLI for all operations
 
 ## Installation
@@ -46,7 +47,7 @@ Galileo provides a unified command-line interface that supports multiple operati
 ### Basic Usage
 
 ```bash
-python main.py [command] [options]
+python -m galileo [command] [options]
 ```
 
 ### Available Commands
@@ -61,7 +62,7 @@ python main.py [command] [options]
 #### 1. Extract Features from CSV Files
 
 ```bash
-python main.py extract --data-dir data/raw_signals --column V1 --output features_V1.csv
+python -m galileo extract --data-dir data/raw_signals --column V1 --output features_V1.csv
 ```
 
 This command:
@@ -75,13 +76,16 @@ Options:
 
 - `--window`: Window size for feature extraction (default: 10)
 - `--no-noise`: Disable noise feature extraction
-- `--filter`: Filter type for noise extraction (default: savgol)
-- More options available (run with `--help` to see all)
+- `--filter`: Filter type for noise extraction ('moving_average', 'butterworth', 'savgol', default: savgol)
+- `--cutoff`: Cutoff frequency for Butterworth filter (default: 0.1)
+- `--fs`: Sampling frequency for Butterworth filter (default: 1.0)
+- `--poly-order`: Polynomial order for Savitzky-Golay filter (default: 2)
+- `--rename`: Rename the column prefix in output features
 
 #### 2. Train a Model
 
 ```bash
-python main.py train --input features_V1.csv --model model_V1.joblib
+python -m galileo train --input features_V1.csv --model model_V1.joblib
 ```
 
 This command:
@@ -98,12 +102,13 @@ Options:
 - `--train-ratio`: Ratio of data to use for training (default: 0.8)
 - `--seed`: Random seed for reproducibility (default: 42)
 - `--no-eval`: Skip model evaluation
+- `--noise-only`: Use only noise features for training
 - `--report`: Path to save evaluation report (default: evaluation_report.csv)
 
 #### 3. Evaluate a Model
 
 ```bash
-python main.py evaluate --model model_V1.joblib --input features_test.csv --output-dir eval_results
+python -m galileo evaluate --model model_V1.joblib --input features_test.csv --output-dir eval_results
 ```
 
 This command:
@@ -122,20 +127,59 @@ Options:
 #### 4. Analyze New Data
 
 ```bash
-python main.py analyze --model model_V1.joblib --input new_signal.csv --output results.json
+python -m galileo analyze --model model_V1.joblib --input new_signal.csv --column V1 --output-dir analysis_results
 ```
 
 This command:
 
 - Loads the model from `model_V1.joblib`
-- Analyzes the signal in `new_signal.csv`
-- Classifies it as REAL or SIMULATED
-- Saves the analysis results to `results.json`
+- Extracts features from the `V1` column in `new_signal.csv`
+- Uses the same feature extraction method as during training, including noise extraction
+- Classifies each window as REAL or SIMULATED
+- Provides an overall classification for the signal with confidence level
+- Generates visualizations of the prediction distribution
+- Saves detailed results to the `analysis_results` directory
 
 Options:
 
-- `--column`: Specific column to analyze (overrides model settings)
-- `--verbose`: Print detailed analysis information
+- `--column`: Specific column to analyze (required)
+- `--rename`: Rename the column to match model expectations (e.g., if model was trained on V1 but input uses voltage1)
+- `--window`: Window size for feature extraction (default: 10)
+- `--output-dir`: Directory to save analysis results (default: analysis)
+- `--no-noise`: Disable noise feature extraction
+- `--filter`: Filter type for noise extraction ('moving_average', 'butterworth', 'savgol', default: savgol)
+- `--cutoff`: Cutoff frequency for Butterworth filter (default: 0.1)
+- `--fs`: Sampling frequency for Butterworth filter (default: 1.0)
+- `--poly-order`: Polynomial order for Savitzky-Golay filter (default: 2)
+
+## Analyze Command Output Files
+
+The analyze command generates the following output files in the specified output directory:
+
+1. `window_predictions.csv`: CSV file containing window-by-window predictions, including:
+
+   - Window index
+   - Classification probability
+   - Binary prediction (0 = simulated, 1 = real)
+   - Classification label (Real or Simulated)
+
+2. `prediction_distribution.svg`: Visualization of the prediction distribution
+
+3. `analysis_summary.txt`: Text file containing a summary of the analysis, including:
+   - Input file and column information
+   - Model information
+   - Number and percentage of windows classified as real/simulated
+   - Overall classification and confidence
+
+## Model Transferability
+
+The analyze command enables transferability by allowing you to apply models trained on one dataset to new datasets. This is particularly useful when:
+
+- Analyzing new signals with the same structure as the training data
+- Working with data from different sources or equipment that may use different column names
+- Evaluating signal authenticity in real-world applications
+
+The `--rename` parameter is particularly useful for transferability scenarios where column names might differ between the training and test datasets.
 
 ## Programmatic Usage
 
@@ -161,12 +205,29 @@ train_with_features(
 )
 
 # Analyze new data
-results = analyze_with_model(
-    file_path='new_signal.csv',
-    model_path='model.joblib'
+is_real, confidence, metrics = analyze_with_model(
+    model_path='model.joblib',
+    input_file='new_signal.csv',
+    target_column='V1',
+    output_dir='analysis_results',
+    extract_noise=True,
+    filter_type='savgol'
 )
-print(f"Classification: {results['classification']} with {results['confidence']}% confidence")
+
+print(f"Classification: {'REAL' if is_real else 'SIMULATED'} with {confidence:.1f}% confidence")
+print(f"Windows classified as real: {metrics['real_windows']}/{metrics['total_windows']} ({metrics['real_windows']/metrics['total_windows']*100:.1f}%)")
 ```
+
+## Understanding Analysis Results
+
+The overall classification is determined by the proportion of windows classified as real. If more than 50% of windows are classified as real, the entire signal is classified as real. The confidence score represents how far the classification is from the decision boundary, with 100% indicating all windows had the same classification and 0% indicating an even split.
+
+For best results, ensure that:
+
+1. The column structure in your input file matches what the model expects
+2. The signal characteristics (sampling rate, units, etc.) are similar to the training data
+3. The window size is the same as what was used during training
+4. If the model was trained with noise features, use the same noise extraction method during analysis
 
 ## License
 
