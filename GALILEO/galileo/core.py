@@ -14,8 +14,8 @@ logging.basicConfig(
 logger = logging.getLogger('galileo')
 
 # Constants
-DEFAULT_WINDOW_SIZE = 10
-DEFAULT_FILTER_TYPE = 'savgol'
+DEFAULT_WINDOW_SIZE = 20
+DEFAULT_FILTER_TYPE = 'moving_average'
 DEFAULT_CUTOFF = 0.1
 DEFAULT_FS = 1.0
 DEFAULT_POLY_ORDER = 2

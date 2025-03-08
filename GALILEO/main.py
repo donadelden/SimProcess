@@ -11,7 +11,8 @@ import argparse
 from galileo.cli import (
     extract_command, 
     train_command, 
-    evaluate_command
+    evaluate_command,
+    analyze_command
 )
 
 
@@ -48,6 +49,13 @@ def create_parser():
         help='Evaluate a trained model'
     )
     evaluate_command.setup_parser(evaluate_parser)
+    
+    # Analyze command
+    analyze_parser = subparsers.add_parser(
+        'analyze',
+        help='Analyze a CSV file using a trained model'
+    )
+    analyze_command.setup_parser(analyze_parser)
     
     return parser
 
