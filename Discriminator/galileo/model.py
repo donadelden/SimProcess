@@ -8,14 +8,15 @@ import numpy as np
 import joblib
 import logging
 from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.inspection import permutation_importance
 from galileo.data import load_data, extract_noise_signal
 from galileo.features import extract_window_features, extract_features
-from galileo.visualization import plot_prediction_distribution, plot_feature_importance
 from galileo.core import ModelError, validate_file_path
+from galileo.visualization import plot_feature_importance, plot_prediction_distribution
 
 logger = logging.getLogger('galileo.model')
 
@@ -91,21 +92,27 @@ def split_features_dataset(features_file, train_ratio=0.8, random_seed=42, noise
     return X_train, X_test, y_train, y_test, feature_names
 
 
-def calculate_feature_importance(model, X, y, feature_names):
+def calculate_feature_importance(model, X, y, feature_names, model_type="svm"):
     """
-    Calculate feature importance using permutation importance.
+    Calculate feature importance using appropriate method for the model type.
     
     Args:
         model: Trained model with predict method
         X: Feature matrix
         y: Target vector
         feature_names: List of feature names
+        model_type: Type of model ("svm", "rf")
         
     Returns:
         pandas.DataFrame: DataFrame with feature importance scores
     """
-    result = permutation_importance(model, X, y, n_repeats=10, random_state=42)
-    importance_scores = result.importances_mean
+    if model_type.lower() == "rf":
+        # For Random Forest, use built-in feature importance
+        importance_scores = model.feature_importances_
+    else:
+        # For other models (like SVM), use permutation importance
+        result = permutation_importance(model, X, y, n_repeats=10, random_state=42)
+        importance_scores = result.importances_mean
     
     importance_df = pd.DataFrame({
         'Feature': feature_names,
@@ -116,7 +123,8 @@ def calculate_feature_importance(model, X, y, feature_names):
     return importance_df
 
 
-def train_model_from_features(X_train, y_train, feature_names, model_path=None, metric_name=None):
+def train_model_from_features(X_train, y_train, feature_names, model_path=None, metric_name=None, 
+                             model_type="svm", **model_params):
     """
     Train a model on the provided features and save it.
     
@@ -126,9 +134,11 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None, 
         feature_names (list): List of feature names
         model_path (str, optional): Path to save the model
         metric_name (str, optional): Name of the metric being analyzed
+        model_type (str): Type of model to train ("svm", "rf")
+        **model_params: Additional parameters for the model
         
     Returns:
-        tuple: (svm, scaler, feature_names)
+        tuple: (model, scaler, feature_names)
     """
     # Handle NaN values
     X_train = X_train.fillna(0)
@@ -137,13 +147,38 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None, 
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_train)
     
-    # Train SVM
-    logger.info("Training SVM classifier...")
-    svm = SVC(kernel='rbf', C=1.0, probability=True)
-    svm.fit(X_scaled, y_train)
+    # Create model based on model_type
+    logger.info(f"Training {model_type.upper()} classifier...")
+    
+    if model_type.lower() == "rf":
+        # Default parameters for Random Forest
+        params = {
+            'n_estimators': 100,
+            'random_state': 42,
+            'n_jobs': -1
+        }
+        # Update with any user-provided parameters
+        params.update(model_params)
+        
+        # Create and train the Random Forest
+        model = RandomForestClassifier(**params)
+        model.fit(X_scaled, y_train)
+    else:  # Default to SVM
+        # Default parameters for SVM
+        params = {
+            'kernel': 'rbf',
+            'C': 1.0,
+            'probability': True
+        }
+        # Update with any user-provided parameters
+        params.update(model_params)
+        
+        # Create and train the SVM
+        model = SVC(**params)
+        model.fit(X_scaled, y_train)
     
     # Calculate feature importance
-    importance_df = calculate_feature_importance(svm, X_scaled, y_train, feature_names)
+    importance_df = calculate_feature_importance(model, X_scaled, y_train, feature_names, model_type)
     
     logger.info("Top 10 Most Important Features:")
     for i, row in importance_df.head(10).iterrows():
@@ -165,25 +200,26 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None, 
     
     # Save model if path is provided
     if model_path:
-        # Store metric_name with the model for later reference
-        joblib.dump((svm, scaler, feature_names, metric_name), model_path)
-        logger.info(f"Model saved to {model_path}")
+        # Store model_type along with the model data
+        joblib.dump((model, scaler, feature_names, metric_name, model_type), model_path)
+        logger.info(f"{model_type.upper()} model saved to {model_path}")
         
-    return svm, scaler, feature_names
+    return model, scaler, feature_names
 
 
-def evaluate_model(X_test, y_test, svm, scaler, column_name=None, report_file="report.csv", has_noise=0):
+def evaluate_model(X_test, y_test, model, scaler, column_name=None, report_file="report.csv", has_noise=0, model_type="svm"):
     """
     Evaluate a trained model on test data.
     
     Args:
         X_test (pandas.DataFrame): Test features
         y_test (pandas.Series): Test labels
-        svm: Trained SVM model
+        model: Trained model (SVM, RandomForest, etc.)
         scaler: Trained feature scaler
         column_name (str, optional): Name of the column being analyzed
         report_file (str): CSV file to save the evaluation metrics
         has_noise (int): 1 if noise features were included, 0 otherwise
+        model_type (str): Type of model ("svm", "rf")
         
     Returns:
         dict: Evaluation metrics
@@ -195,8 +231,8 @@ def evaluate_model(X_test, y_test, svm, scaler, column_name=None, report_file="r
     X_scaled = scaler.transform(X_test)
     
     # Make predictions
-    y_pred = svm.predict(X_scaled)
-    y_prob = svm.predict_proba(X_scaled)[:, 1]
+    y_pred = model.predict(X_scaled)
+    y_prob = model.predict_proba(X_scaled)[:, 1]
     
     # Calculate accuracy
     accuracy = accuracy_score(y_test, y_pred)
@@ -255,7 +291,8 @@ def evaluate_model(X_test, y_test, svm, scaler, column_name=None, report_file="r
             'total_windows': total_windows,
             'real_windows': real_windows,
             'simulated_windows': simulated_windows,
-            'has_noise': has_noise
+            'has_noise': has_noise,
+            'model_type': model_type
         }
         
         # Check if report file exists
@@ -294,7 +331,8 @@ def evaluate_model(X_test, y_test, svm, scaler, column_name=None, report_file="r
     }
 
 def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=42, 
-                       skip_evaluation=False, report_file="report.csv", noise_only=False):
+                       skip_evaluation=False, report_file="report.csv", noise_only=False,
+                       model_type="svm", **model_params):
     """
     Train and evaluate a model using a features file with train-test split.
     
@@ -306,6 +344,8 @@ def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=
         skip_evaluation (bool): Whether to skip model evaluation
         report_file (str): CSV file to save the evaluation metrics
         noise_only (bool): Whether to use only noise features for training
+        model_type (str): Type of model to train ("svm", "rf")
+        **model_params: Additional parameters for the model
         
     Returns:
         bool: True if successful, False otherwise
@@ -353,14 +393,18 @@ def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=
             has_noise = 1
         
         logger.info(f"Detected: column={column_name}, has_noise={has_noise} ({'with' if has_noise else 'without'} noise features)")
+        logger.info(f"Using model type: {model_type}")
         
         # Train the model
-        svm, scaler, _ = train_model_from_features(X_train, y_train, feature_names, model_path, metric_name=column_name)
+        model, scaler, _ = train_model_from_features(
+            X_train, y_train, feature_names, model_path, 
+            metric_name=column_name, model_type=model_type, **model_params
+        )
         
         # Evaluate the model if not skipped
         if not skip_evaluation:
             logger.info("Evaluating model on test set:")
-            evaluate_model(X_test, y_test, svm, scaler, column_name, report_file, has_noise)
+            evaluate_model(X_test, y_test, model, scaler, column_name, report_file, has_noise, model_type)
         
         return True
         
@@ -399,13 +443,18 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
         model_data = joblib.load(model_path)
         
         # Check model format
-        if len(model_data) == 4:
-            svm, scaler, feature_names, model_column = model_data
+        if len(model_data) == 5:  # New format with model_type
+            model, scaler, feature_names, model_column, model_type = model_data
+        elif len(model_data) == 4:  # Old format without model_type
+            model, scaler, feature_names, model_column = model_data
+            model_type = "svm"  # Default to SVM for backward compatibility
         else:
-            svm, scaler, feature_names = model_data
+            model, scaler, feature_names = model_data
             model_column = None
+            model_type = "svm"  # Default to SVM for backward compatibility
         
         logger.info(f"Model was trained on column: {model_column or 'unknown'}")
+        logger.info(f"Model type: {model_type}")
         
         # Load data
         logger.info(f"Loading data from {input_file}")
@@ -543,8 +592,8 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
         X_scaled = scaler.transform(X)
         
         # Make predictions
-        y_pred = svm.predict(X_scaled)
-        y_prob = svm.predict_proba(X_scaled)[:, 1]  # Probability of being real
+        y_pred = model.predict(X_scaled)
+        y_prob = model.predict_proba(X_scaled)[:, 1]  # Probability of being real
         
         # Calculate statistics
         total_windows = len(y_pred)
@@ -592,7 +641,8 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
             f.write(f"Input file: {input_file}\n")
             f.write(f"Analyzed column: {target_column}\n")
             f.write(f"Model used: {model_path}\n")
-            f.write(f"Model trained on: {model_column or 'unknown'}\n\n")
+            f.write(f"Model trained on: {model_column or 'unknown'}\n")
+            f.write(f"Model type: {model_type}\n\n")
             
             f.write(f"Analysis Results:\n")
             f.write(f"Total windows analyzed: {total_windows}\n")

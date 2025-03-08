@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Three-Step Workflow Example
+Random Forest Workflow Example
 
-This script demonstrates a complete workflow:
+This script demonstrates a complete workflow using Random Forest instead of SVM:
 1. Extract features from data with specific parameters
-2. Train a model using the extracted features
+2. Train a Random Forest model using the extracted features
 3. Analyze multiple files with the model
 """
 
@@ -16,14 +16,15 @@ from galileo.model import train_with_features, analyze_with_model
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('workflow_example')
+logger = logging.getLogger('rf_workflow_example')
 
 # Define parameters
-WINDOW_SIZE = 100
+WINDOW_SIZE = 20
 FILTER_TYPE = "moving_average"
-TARGET_COLUMN = "C2"
+TARGET_COLUMN = "C1"
 DATA_DIR = "dataset/data"
-OUTPUT_DIR = "output"
+OUTPUT_DIR = "rf_output"
+MODEL_TYPE = "rf"  # Using Random Forest instead of SVM
 
 def step1_extract_features():
     """
@@ -66,9 +67,9 @@ def step1_extract_features():
         logger.error(f"Error during feature extraction: {str(e)}")
         return None
 
-def step2_train_model(features_file):
+def step2_train_rf_model(features_file):
     """
-    Step 2: Train a model using the extracted features.
+    Step 2: Train a Random Forest model using the extracted features.
     
     Args:
         features_file (str): Path to the extracted features file
@@ -77,7 +78,7 @@ def step2_train_model(features_file):
         str: Path to the trained model file, or None if training failed
     """
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 2: TRAINING MODEL")
+    logger.info("STEP 2: TRAINING RANDOM FOREST MODEL")
     logger.info("=" * 80)
     
     if not features_file or not os.path.exists(features_file):
@@ -85,24 +86,36 @@ def step2_train_model(features_file):
         return None
     
     # Define model file path
-    model_file = os.path.join(OUTPUT_DIR, f"model_{TARGET_COLUMN}.joblib")
+    model_file = os.path.join(OUTPUT_DIR, f"{MODEL_TYPE}_model_{TARGET_COLUMN}.joblib")
     evaluation_report = os.path.join(OUTPUT_DIR, "evaluation_report.csv")
     
-    logger.info(f"Training model using features from {features_file}")
+    logger.info(f"Training {MODEL_TYPE.upper()} model using features from {features_file}")
     
     try:
+        # Random Forest specific parameters
+        rf_params = {
+            'n_estimators': 200,  # More trees for better accuracy
+            'max_depth': 20,      # Limit tree depth to prevent overfitting
+            'min_samples_split': 5,  # More samples required for node splitting
+            'min_samples_leaf': 2,   # More samples required at leaf nodes
+            'random_state': 42,
+            'n_jobs': -1          # Use all available CPU cores
+        }
+        
         success = train_with_features(
             features_file=features_file,
             model_path=model_file,
             train_ratio=0.8,
-            report_file=evaluation_report
+            report_file=evaluation_report,
+            model_type=MODEL_TYPE,  # Specify Random Forest
+            **rf_params  # Pass Random Forest parameters
         )
         
         if not success:
             logger.error("Model training failed")
             return None
         
-        logger.info(f"Model successfully trained and saved to {model_file}")
+        logger.info(f"Random Forest model successfully trained and saved to {model_file}")
         logger.info(f"Evaluation report saved to {evaluation_report}")
         return model_file
         
@@ -112,7 +125,7 @@ def step2_train_model(features_file):
 
 def step3_analyze_files(model_file):
     """
-    Step 3: Analyze multiple files using the trained model.
+    Step 3: Analyze multiple files using the trained Random Forest model.
     
     Args:
         model_file (str): Path to the trained model file
@@ -121,7 +134,7 @@ def step3_analyze_files(model_file):
         bool: True if all analyses completed successfully, False otherwise
     """
     logger.info("\n" + "=" * 80)
-    logger.info("STEP 3: ANALYZING FILES")
+    logger.info("STEP 3: ANALYZING FILES WITH RANDOM FOREST MODEL")
     logger.info("=" * 80)
     
     if not model_file or not os.path.exists(model_file):
@@ -131,7 +144,7 @@ def step3_analyze_files(model_file):
     # Define files to analyze with their parameters
     files_to_analyze = [
         {
-            "file": "dataset/gan/generated_data2.csv",
+            "file": "dataset/gan/generated_data.csv",
             "column": TARGET_COLUMN,
             "rename": None,
             "output_dir": os.path.join(OUTPUT_DIR, "analysis_gan")
@@ -143,28 +156,10 @@ def step3_analyze_files(model_file):
             "output_dir": os.path.join(OUTPUT_DIR, "analysis_panda")
         },
         {
-            "file": "dataset/data/2Mosaik.csv",
-            "column": TARGET_COLUMN,
-            "rename": None,
-            "output_dir": os.path.join(OUTPUT_DIR, "analysis_mosaik")
-        },
-        {
-            "file": "dataset/data/processed_EPIC4.csv",
-            "column": TARGET_COLUMN,
-            "rename": None,
-            "output_dir": os.path.join(OUTPUT_DIR, "analysis_EPIC")
-        },
-        {
             "file": "dataset/morris/data6.csv",
-            "column": "R1-PM4:I",
+            "column": "R1-PM5:I",
             "rename": TARGET_COLUMN,
             "output_dir": os.path.join(OUTPUT_DIR, "analysis_morris")
-        },
-        {
-            "file": "dataset/morris/data7.csv",
-            "column": "R1-PM4:I",
-            "rename": TARGET_COLUMN,
-            "output_dir": os.path.join(OUTPUT_DIR, "analysis_morris2")
         }
     ]
     
@@ -215,8 +210,8 @@ def step3_analyze_files(model_file):
         return False
 
 def main():
-    """Run the complete three-step workflow."""
-    logger.info("Starting three-step workflow")
+    """Run the complete Random Forest workflow."""
+    logger.info("Starting Random Forest workflow example")
     
     # Step 1: Extract features
     features_file = step1_extract_features()
@@ -224,8 +219,8 @@ def main():
         logger.error("Feature extraction failed. Workflow cannot continue.")
         return 1
     
-    # Step 2: Train model
-    model_file = step2_train_model(features_file)
+    # Step 2: Train Random Forest model
+    model_file = step2_train_rf_model(features_file)
     if not model_file:
         logger.error("Model training failed. Workflow cannot continue.")
         return 1
@@ -233,7 +228,7 @@ def main():
     # Step 3: Analyze files
     analysis_success = step3_analyze_files(model_file)
     
-    logger.info("\nWorkflow complete.")
+    logger.info("\nRandom Forest workflow complete.")
     
     return 0 if analysis_success else 1
 
