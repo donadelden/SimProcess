@@ -13,7 +13,7 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     # Step 1: Extract features for this column
     echo "Extracting features..."
-    python3 extractor.py -c "$COLUMN"
+    python3 main.py extract -d ../Discriminator/data/ -c "$COLUMN" -w 20
     
     # Check if extraction was successful
     if [ $? -ne 0 ]; then
@@ -23,7 +23,7 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     # Step 2: Run main analysis on the extracted features
     echo "Running analysis..."
-    python3 main.py -i "combined_${COLUMN}_features.csv"
+    python3 main.py train -i "combined_${COLUMN}_features.csv" --noise-only
     
     # Check if analysis was successful
     if [ $? -ne 0 ]; then

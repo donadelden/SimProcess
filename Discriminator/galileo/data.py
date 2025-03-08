@@ -1,7 +1,14 @@
+"""
+Data loading and preprocessing functions for the Galileo framework.
+"""
+
 import pandas as pd
 import numpy as np
 import scipy.signal as signal
+import logging
+from galileo.core import DataLoadError, is_numeric_column
 
+logger = logging.getLogger('galileo.data')
 
 def load_data(file_path):
     """
@@ -11,7 +18,10 @@ def load_data(file_path):
         file_path (str): Path to the CSV file
         
     Returns:
-        pandas.DataFrame: Loaded data or None if error
+        pandas.DataFrame: Loaded data
+        
+    Raises:
+        DataLoadError: If file loading fails
     """
     try:
         df = pd.read_csv(file_path)
@@ -19,8 +29,8 @@ def load_data(file_path):
             df['date'] = pd.to_datetime(df['timestamp'])
         return df
     except Exception as e:
-        print(f"Error loading file: {e}")
-        return None
+        logger.error(f"Error loading file {file_path}: {str(e)}")
+        raise DataLoadError(f"Failed to load data from {file_path}: {str(e)}")
 
 
 def filter_window(window, epsilon=0.1, target_column=None):
@@ -57,10 +67,10 @@ def filter_window(window, epsilon=0.1, target_column=None):
         filter_columns.extend(power_cols)
     
     filter_columns = [col for col in filter_columns if col in window.columns]
-    filter_columns = [col for col in filter_columns if np.issubdtype(window[col].dtype, np.number)]
+    filter_columns = [col for col in filter_columns if is_numeric_column(window, col)]
     
     if not filter_columns:
-        print("Warning: No valid columns to filter on.")
+        logger.warning("No valid columns to filter on.")
         return pd.DataFrame(True, index=window.index, columns=window.columns)
     
     keep_mask = pd.DataFrame(True, index=window.index, columns=window.columns)
@@ -129,6 +139,9 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
                     
                     filtered_df.loc[window.index[~keep_mask[col]], col] = np.nan
     
+    logger.info(f"Filtered {nullified_cells}/{total_cells} cells ({nullified_cells/total_cells*100:.2f}%) "
+                f"across {total_windows} windows")
+    
     return filtered_df
 
 
@@ -180,13 +193,14 @@ def savgol_filter(data, window_size, poly_order):
     return signal.savgol_filter(data, window_size, poly_order)
 
 
-def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_order=2, keep_noise_only=True, target_column=None):
+def extract_noise_signal(df, filter_type='savgol', window_size=5, cutoff=0.1, fs=1.0, 
+                        poly_order=2, keep_noise_only=True, target_column=None):
     """
     Extract noise from signals using various filtering methods.
     
     Args:
         df (pandas.DataFrame): Data containing signals
-        filter (str): Type of filter to use ('moving_average', 'butterworth', 'savgol')
+        filter_type (str): Type of filter to use ('moving_average', 'butterworth', 'savgol')
         window_size (int): Size of the window for filtering
         cutoff (float): Cutoff frequency for Butterworth filter
         fs (float): Sampling frequency for Butterworth filter
@@ -199,30 +213,43 @@ def extract_noise_signal(df, filter, window_size=5, cutoff=0.1, fs=1.0, poly_ord
     """
     noise_signals = pd.DataFrame(index=df.index)
 
-    # clean the data just in case
-    df.dropna(inplace=True)
+    # Clean the data just in case
+    df_clean = df.dropna().copy()
+    
+    if df_clean.empty:
+        logger.warning("No valid data for noise extraction after dropping NA values")
+        return noise_signals
     
     # Select columns to process
-    columns_to_process = [target_column] if target_column and target_column in df.columns else df.columns
+    columns_to_process = [target_column] if target_column and target_column in df_clean.columns else df_clean.columns
     
-    # noise extraction on each column
+    # Noise extraction on each column
     for column in columns_to_process:
         if column == 'timestamp' or column == 'date':
-            noise_signals[column] = df[column]
+            noise_signals[column] = df_clean[column]
+            continue
+            
+        if not is_numeric_column(df_clean, column):
             continue
         
-        data = df[column].values
+        data = df_clean[column].values
         
-        if filter == 'moving_average':
-            noise_signals[column] = moving_average_filter(data, window_size=window_size)
-        elif filter == 'butterworth':
-            noise_signals[column] = butterworth_filter(data, cutoff=cutoff, fs=fs)
-        elif filter == 'savgol':
-            noise_signals[column] = savgol_filter(data, window_size=window_size, poly_order=poly_order)
+        if filter_type == 'moving_average':
+            filtered_signal = moving_average_filter(data, window_size=window_size)
+        elif filter_type == 'butterworth':
+            filtered_signal = butterworth_filter(data, cutoff=cutoff, fs=fs)
+        elif filter_type == 'savgol':
+            # Ensure window_size is odd for savgol
+            if window_size % 2 == 0:
+                window_size += 1
+            filtered_signal = savgol_filter(data, window_size=window_size, poly_order=poly_order)
         else:
-            raise ValueError(f"Unknown filter type: {filter}")
+            logger.error(f"Unknown filter type: {filter_type}")
+            continue
 
         if keep_noise_only:
-            noise_signals[column] = data - noise_signals[column]
+            noise_signals[column] = data - filtered_signal
+        else:
+            noise_signals[column] = filtered_signal
             
     return noise_signals
