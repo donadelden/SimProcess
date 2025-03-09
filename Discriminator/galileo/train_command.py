@@ -53,7 +53,7 @@ def setup_parser(parser):
     
     # Model type selection
     parser.add_argument('--model-type',
-                      choices=['svm', 'rf'],
+                      choices=['svm', 'rf', 'ocsvm'],
                       default='svm',
                       help='Type of model to train (default: svm)')
     
@@ -61,12 +61,29 @@ def setup_parser(parser):
     parser.add_argument('--kernel',
                       choices=['rbf', 'linear', 'poly', 'sigmoid'],
                       default='rbf',
-                      help='Kernel type for SVM (default: rbf)')
+                      help='Kernel type for SVM and One-Class SVM (default: rbf)')
     
     parser.add_argument('--C',
                       type=float,
                       default=1.0,
                       help='Regularization parameter for SVM (default: 1.0)')
+    
+    # One-Class SVM specific parameters
+    parser.add_argument('--nu',
+                      type=float,
+                      default=0.1,
+                      help='Nu parameter for One-Class SVM, controlling the upper bound on training errors and lower bound on support vectors (default: 0.1)')
+    
+    parser.add_argument('--gamma',
+                      type=str,
+                      default='scale',
+                      help='Kernel coefficient for rbf, poly and sigmoid kernels in One-Class SVM (default: scale)')
+    
+    parser.add_argument('--target-class',
+                      type=int,
+                      choices=[0, 1],
+                      default=1,
+                      help='Target class to model with One-Class SVM (1=real, 0=simulated) (default: 1)')
     
     # Random Forest specific parameters
     parser.add_argument('--n-estimators',
@@ -120,6 +137,15 @@ def run(args):
                 'probability': True
             }
             logger.info(f"SVM parameters: kernel={args.kernel}, C={args.C}")
+        elif args.model_type == 'ocsvm':
+            model_params = {
+                'kernel': args.kernel,
+                'nu': args.nu,
+                'gamma': args.gamma,
+                'target_class': args.target_class
+            }
+            logger.info(f"One-Class SVM parameters: kernel={args.kernel}, nu={args.nu}, "
+                        f"gamma={args.gamma}, target_class={args.target_class}")
         elif args.model_type == 'rf':
             model_params = {
                 'n_estimators': args.n_estimators,

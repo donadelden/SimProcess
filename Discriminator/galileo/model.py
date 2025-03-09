@@ -10,6 +10,7 @@ import logging
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
+from sklearn.svm import OneClassSVM
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.inspection import permutation_importance
@@ -101,7 +102,7 @@ def calculate_feature_importance(model, X, y, feature_names, model_type="svm"):
         X: Feature matrix
         y: Target vector
         feature_names: List of feature names
-        model_type: Type of model ("svm", "rf")
+        model_type: Type of model ("svm", "rf", "ocsvm")
         
     Returns:
         pandas.DataFrame: DataFrame with feature importance scores
@@ -109,6 +110,46 @@ def calculate_feature_importance(model, X, y, feature_names, model_type="svm"):
     if model_type.lower() == "rf":
         # For Random Forest, use built-in feature importance
         importance_scores = model.feature_importances_
+    elif model_type.lower() == "ocsvm":
+        # For One-Class SVM, we need a custom approach since permutation importance
+        # doesn't work well with one-class classifiers
+        
+        # Get the target class
+        target_class = getattr(model, 'target_class', 1)
+        
+        # Filter X to only include samples from the target class
+        X_target = X[y == target_class]
+        if len(X_target) == 0:
+            logger.warning("No samples from target class found for feature importance calculation")
+            # Return zero importance for all features as fallback
+            importance_scores = np.zeros(len(feature_names))
+        else:
+            # Define a scoring function that doesn't rely on y
+            # We'll use the average decision function value as our score
+            # (higher = better for inliers)
+            def ocsvm_score_no_y(estimator, X_subset):
+                decision_values = estimator.decision_function(X_subset)
+                return np.mean(decision_values)
+            
+            # Define a permutation importance function for OCSVM
+            # We'll manually implement a simplified version
+            importance_scores = []
+            baseline_score = ocsvm_score_no_y(model, X_target)
+            
+            # Calculate importance for each feature
+            for i in range(X_target.shape[1]):
+                # Create a copy of the data and permute one feature
+                X_permuted = X_target.copy()
+                X_permuted[:, i] = np.random.permutation(X_permuted[:, i])
+                
+                # Calculate new score
+                permuted_score = ocsvm_score_no_y(model, X_permuted)
+                
+                # Importance is the decrease in score
+                importance = baseline_score - permuted_score
+                importance_scores.append(importance)
+            
+            importance_scores = np.array(importance_scores)
     else:
         # For other models (like SVM), use permutation importance
         result = permutation_importance(model, X, y, n_repeats=10, random_state=42)
@@ -134,7 +175,7 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None, 
         feature_names (list): List of feature names
         model_path (str, optional): Path to save the model
         metric_name (str, optional): Name of the metric being analyzed
-        model_type (str): Type of model to train ("svm", "rf")
+        model_type (str): Type of model to train ("svm", "rf", "ocsvm")
         **model_params: Additional parameters for the model
         
     Returns:
@@ -163,6 +204,34 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None, 
         # Create and train the Random Forest
         model = RandomForestClassifier(**params)
         model.fit(X_scaled, y_train)
+    elif model_type.lower() == "ocsvm":
+        # Default parameters for One-Class SVM
+        params = {
+            'kernel': 'rbf',
+            'nu': 0.1,
+            'gamma': 'scale'
+        }
+        # Update with any user-provided parameters, excluding 'target_class'
+        params.update({k: v for k, v in model_params.items() if k not in ['target_class']})
+        
+        # Extract target class (which class to consider as "normal")
+        target_class = model_params.get('target_class', 1)  # Default to class 1 (real)
+        
+        # Filter training data to only include the target class
+        X_target = X_scaled[y_train == target_class]
+        
+        if len(X_target) == 0:
+            logger.error(f"No samples found for target class {target_class}")
+            raise ModelError(f"No samples found for target class {target_class}")
+        
+        logger.info(f"Training One-Class SVM on {len(X_target)} samples of class {'real' if target_class == 1 else 'simulated'}")
+        
+        # Create and train the One-Class SVM
+        model = OneClassSVM(**params)
+        model.fit(X_target)
+        
+        # Store the target class with the model
+        model.target_class = target_class
     else:  # Default to SVM
         # Default parameters for SVM
         params = {
@@ -200,12 +269,15 @@ def train_model_from_features(X_train, y_train, feature_names, model_path=None, 
     
     # Save model if path is provided
     if model_path:
-        # Store model_type along with the model data
-        joblib.dump((model, scaler, feature_names, metric_name, model_type), model_path)
+        if model_type.lower() == "ocsvm":
+            # Store model_type along with the model data and target_class
+            joblib.dump((model, scaler, feature_names, metric_name, model_type, model_params.get('target_class', 1)), model_path)
+        else:
+            # Store model_type along with the model data
+            joblib.dump((model, scaler, feature_names, metric_name, model_type), model_path)
         logger.info(f"{model_type.upper()} model saved to {model_path}")
         
     return model, scaler, feature_names
-
 
 def evaluate_model(X_test, y_test, model, scaler, column_name=None, report_file="report.csv", has_noise=0, model_type="svm"):
     """
@@ -219,7 +291,7 @@ def evaluate_model(X_test, y_test, model, scaler, column_name=None, report_file=
         column_name (str, optional): Name of the column being analyzed
         report_file (str): CSV file to save the evaluation metrics
         has_noise (int): 1 if noise features were included, 0 otherwise
-        model_type (str): Type of model ("svm", "rf")
+        model_type (str): Type of model ("svm", "rf", "ocsvm")
         
     Returns:
         dict: Evaluation metrics
@@ -230,9 +302,45 @@ def evaluate_model(X_test, y_test, model, scaler, column_name=None, report_file=
     # Scale features
     X_scaled = scaler.transform(X_test)
     
-    # Make predictions
-    y_pred = model.predict(X_scaled)
-    y_prob = model.predict_proba(X_scaled)[:, 1]
+    # Make predictions based on model type
+    if model_type.lower() == "ocsvm":
+        # Get the target class that was used for training
+        target_class = getattr(model, 'target_class', 1)  # Default to 1 if not stored
+        
+        # For OCSVM, predictions are 1 for inliers and -1 for outliers
+        raw_pred = model.predict(X_scaled)
+        
+        # Convert to binary classification format:
+        # If target_class is 1 (real), then inliers (1) -> 1, outliers (-1) -> 0
+        # If target_class is 0 (simulated), then inliers (1) -> 0, outliers (-1) -> 1
+        if target_class == 1:
+            y_pred = (raw_pred == 1).astype(int)  # 1 for inliers, 0 for outliers
+        else:
+            y_pred = (raw_pred == -1).astype(int)  # 1 for outliers, 0 for inliers
+        
+        # OCSVM doesn't provide probability estimates by default
+        # We can use decision_function as a proxy for confidence
+        decision_values = model.decision_function(X_scaled)
+        
+        # Normalize to [0, 1] range for consistency
+        min_val, max_val = np.min(decision_values), np.max(decision_values)
+        if max_val > min_val:
+            normalized_values = (decision_values - min_val) / (max_val - min_val)
+        else:
+            normalized_values = np.zeros_like(decision_values)
+        
+        # For target_class=1, higher decision values -> higher probability of class 1
+        # For target_class=0, lower decision values -> higher probability of class 1
+        if target_class == 1:
+            y_prob = normalized_values
+        else:
+            y_prob = 1 - normalized_values
+            
+        logger.info(f"One-Class SVM target class: {'Real' if target_class == 1 else 'Simulated'}")
+    else:
+        # Original prediction code for SVM and RF
+        y_pred = model.predict(X_scaled)
+        y_prob = model.predict_proba(X_scaled)[:, 1]  # Probability of being real
     
     # Calculate accuracy
     accuracy = accuracy_score(y_test, y_pred)
@@ -443,7 +551,11 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
         model_data = joblib.load(model_path)
         
         # Check model format
-        if len(model_data) == 5:  # New format with model_type
+        if len(model_data) == 6:  # OCSVM format with target_class
+            model, scaler, feature_names, model_column, model_type, target_class = model_data
+            if model_type.lower() == "ocsvm":
+                model.target_class = target_class
+        elif len(model_data) == 5:  # New format with model_type
             model, scaler, feature_names, model_column, model_type = model_data
         elif len(model_data) == 4:  # Old format without model_type
             model, scaler, feature_names, model_column = model_data
@@ -591,9 +703,45 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
         # Scale features
         X_scaled = scaler.transform(X)
         
-        # Make predictions
-        y_pred = model.predict(X_scaled)
-        y_prob = model.predict_proba(X_scaled)[:, 1]  # Probability of being real
+        # Make predictions based on model type
+        if model_type.lower() == "ocsvm":
+            # Get the target class that was used for training
+            target_class = getattr(model, 'target_class', 1)  # Default to 1 if not stored
+            
+            # For OCSVM, predictions are 1 for inliers and -1 for outliers
+            raw_pred = model.predict(X_scaled)
+            
+            # Convert to binary classification format:
+            # If target_class is 1 (real), then inliers (1) -> 1, outliers (-1) -> 0
+            # If target_class is 0 (simulated), then inliers (1) -> 0, outliers (-1) -> 1
+            if target_class == 1:
+                y_pred = (raw_pred == 1).astype(int)  # 1 for inliers, 0 for outliers
+            else:
+                y_pred = (raw_pred == -1).astype(int)  # 1 for outliers, 0 for inliers
+            
+            # OCSVM doesn't provide probability estimates by default
+            # We can use decision_function as a proxy for confidence
+            decision_values = model.decision_function(X_scaled)
+            
+            # Normalize to [0, 1] range for consistency
+            min_val, max_val = np.min(decision_values), np.max(decision_values)
+            if max_val > min_val:
+                normalized_values = (decision_values - min_val) / (max_val - min_val)
+            else:
+                normalized_values = np.zeros_like(decision_values)
+            
+            # For target_class=1, higher decision values -> higher probability of class 1
+            # For target_class=0, lower decision values -> higher probability of class 1
+            if target_class == 1:
+                y_prob = normalized_values
+            else:
+                y_prob = 1 - normalized_values
+                
+            logger.info(f"One-Class SVM target class: {'Real' if target_class == 1 else 'Simulated'}")
+        else:
+            # Original prediction code for SVM and RF
+            y_pred = model.predict(X_scaled)
+            y_prob = model.predict_proba(X_scaled)[:, 1]  # Probability of being real
         
         # Calculate statistics
         total_windows = len(y_pred)
