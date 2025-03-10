@@ -13,6 +13,13 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     # Step 1: Extract features for this column
     echo "Extracting features..."
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 5 --no-noise --output dataset_features/window5/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 10 --no-noise --output dataset_features/window10/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 15 --no-noise --output dataset_features/window15/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 20 --no-noise --output dataset_features/window20/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 30 --no-noise --output dataset_features/window30/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 40 --no-noise --output dataset_features/window40/no_noise/combined_${COLUMN}_features.csv 
+    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 50 --no-noise --output dataset_features/window50/no_noise/combined_${COLUMN}_features.csv 
     python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 60 --no-noise --output dataset_features/window60/no_noise/combined_${COLUMN}_features.csv 
     python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 70 --no-noise --output dataset_features/window70/no_noise/combined_${COLUMN}_features.csv 
     python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 80 --no-noise --output dataset_features/window80/no_noise/combined_${COLUMN}_features.csv 

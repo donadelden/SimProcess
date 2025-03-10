@@ -147,18 +147,38 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
 
 def moving_average_filter(data, window_size):
     """
-    Apply a moving average filter to the data.
+    Apply a moving average filter to the data where each point is replaced by
+    the average of values in the range from x-a to x+a, where a is the square root
+    of the window_size.
     
     Args:
         data (numpy.ndarray): Data to filter
-        window_size (int): Size of the moving window
+        window_size (int): Parameter to determine the window range
         
     Returns:
         numpy.ndarray: Filtered data
     """
-    return np.convolve(data, np.ones(window_size)/window_size, mode='same')
-
-
+    # Ensure window_size is positive
+    window_size = max(1, window_size)
+    
+    # Calculate 'a' as the integer part of the square root of window_size
+    a = int(np.sqrt(window_size))
+    
+    # Create an output array with the same shape as the input
+    filtered_data = np.zeros_like(data)
+    
+    # For each position in the data
+    for i in range(len(data)):
+        # Calculate window start and end indices, handling boundary cases
+        start_idx = max(0, i - a)
+        end_idx = min(len(data), i + a + 1)  # Add 1 because slicing is exclusive for the end index
+        
+        # Calculate the average of values in this window
+        window_values = data[start_idx:end_idx]
+        filtered_data[i] = np.mean(window_values)
+    
+    return filtered_data
+        
 def butterworth_filter(data, cutoff, fs, order=4):
     """
     Apply a Butterworth low-pass filter to the data.
