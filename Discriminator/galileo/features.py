@@ -569,7 +569,7 @@ def clean_features_dataframe(combined_df):
 
 def process_csv_files(data_directory, output_file=None, target_column='V1', window_size=10, 
                   extract_noise=True, filter_type='savgol', cutoff=0.1, fs=1.0, poly_order=2, 
-                  output_column_prefix=None):
+                  output_column_prefix=None, process_variance=1e-5, measurement_variance=1e-1):
     """
     Process all CSV files in the given directory, extract features from specified column,
     and combine them into a single CSV file.

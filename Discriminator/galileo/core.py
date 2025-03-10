@@ -15,7 +15,7 @@ logger = logging.getLogger('galileo')
 
 # Constants
 DEFAULT_WINDOW_SIZE = 20
-DEFAULT_FILTER_TYPE = 'moving_average'
+DEFAULT_FILTER_TYPE = 'kalman'
 DEFAULT_CUTOFF = 0.1
 DEFAULT_FS = 1.0
 DEFAULT_POLY_ORDER = 2
@@ -23,6 +23,9 @@ DEFAULT_TRAIN_RATIO = 0.8
 DEFAULT_RANDOM_SEED = 42
 DEFAULT_MODEL_PATH = 'galileo_model.joblib'
 DEFAULT_REPORT_PATH = 'evaluation_report.csv'
+DEFAULT_PROCESS_VARIANCE = 1e-5
+DEFAULT_MEASUREMENT_VARIANCE = 1e-1
+
 
 # Signal types and their corresponding columns
 SIGNAL_TYPES = {

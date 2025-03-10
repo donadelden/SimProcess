@@ -161,6 +161,41 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
     
     return filtered_df
 
+def kalman_filter(data, process_variance=1e-5, measurement_variance=1e-1):
+    """
+    Apply a simple Kalman filter to the data.
+    
+    Args:
+        data (numpy.ndarray): Data to filter
+        process_variance (float): Process variance parameter (Q)
+        measurement_variance (float): Measurement variance parameter (R)
+        
+    Returns:
+        numpy.ndarray: Filtered data
+    """
+    # Initialize state and covariance
+    x_hat = data[0]  # Initial state estimate
+    P = 1.0  # Initial covariance estimate
+    
+    # Allocate space for filtered data
+    filtered_data = np.zeros_like(data)
+    
+    # Kalman filter loop
+    for i, measurement in enumerate(data):
+        # Prediction step (time update)
+        x_hat_minus = x_hat
+        P_minus = P + process_variance
+        
+        # Correction step (measurement update)
+        K = P_minus / (P_minus + measurement_variance)  # Kalman gain
+        x_hat = x_hat_minus + K * (measurement - x_hat_minus)
+        P = (1 - K) * P_minus
+        
+        # Store the estimate
+        filtered_data[i] = x_hat
+    
+    return filtered_data
+
 def moving_average_filter(data, window_size):
     """
     Apply a moving average filter to the data where each point is replaced by
@@ -229,19 +264,22 @@ def savgol_filter(data, window_size, poly_order):
     return signal.savgol_filter(data, window_size, poly_order)
 
 def extract_noise_signal(df, filter_type='savgol', window_size=5, cutoff=0.1, fs=1.0, 
-                        poly_order=2, keep_noise_only=True, target_column=None):
+                        poly_order=2, keep_noise_only=True, target_column=None,
+                        process_variance=1e-5, measurement_variance=1e-1):
     """
     Extract noise from signals using various filtering methods.
     
     Args:
         df (pandas.DataFrame): Data containing signals
-        filter_type (str): Type of filter to use ('moving_average', 'butterworth', 'savgol')
+        filter_type (str): Type of filter to use ('moving_average', 'butterworth', 'savgol', 'kalman')
         window_size (int): Size of the window for filtering
         cutoff (float): Cutoff frequency for Butterworth filter
         fs (float): Sampling frequency for Butterworth filter
         poly_order (int): Polynomial order for Savitzky-Golay filter
         keep_noise_only (bool): If True, return only the noise component
-        target_column (str, optional): Specific column to extract noise from. If provided, only this column will be processed.
+        target_column (str, optional): Specific column to extract noise from
+        process_variance (float): Process variance parameter for Kalman filter
+        measurement_variance (float): Measurement variance parameter for Kalman filter
         
     Returns:
         pandas.DataFrame: Data with extracted noise signals
@@ -278,6 +316,10 @@ def extract_noise_signal(df, filter_type='savgol', window_size=5, cutoff=0.1, fs
             if window_size % 2 == 0:
                 window_size += 1
             filtered_signal = savgol_filter(data, window_size=window_size, poly_order=poly_order)
+        elif filter_type == 'kalman':
+            filtered_signal = kalman_filter(data, 
+                                          process_variance=process_variance, 
+                                          measurement_variance=measurement_variance)
         else:
             logger.error(f"Unknown filter type: {filter_type}")
             continue

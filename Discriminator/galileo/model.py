@@ -522,7 +522,8 @@ def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=
 
 def analyze_with_model(model_path, input_file, target_column, output_dir="analysis", 
                       window_size=10, column_rename=None, extract_noise=True, 
-                      filter_type="savgol", cutoff=0.1, fs=1.0, poly_order=2):
+                      filter_type="savgol", cutoff=0.1, fs=1.0, poly_order=2,
+                      process_variance=1e-5, measurement_variance=1e-1):
     """
     Analyze a CSV file using a trained model to classify signals as real or simulated.
     

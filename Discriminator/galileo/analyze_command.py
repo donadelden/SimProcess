@@ -54,10 +54,22 @@ def setup_parser(parser):
                       help='Disable noise feature extraction')
     
     parser.add_argument('--filter', 
-                      choices=['moving_average', 'butterworth', 'savgol'], 
-                      default=DEFAULT_FILTER_TYPE,
-                      help=f'Filter type for noise extraction (default: {DEFAULT_FILTER_TYPE})')
+                       choices=['moving_average', 'butterworth', 'savgol', 'kalman'], 
+                       default=DEFAULT_FILTER_TYPE,
+                       help=f'Filter type for noise extraction (default: {DEFAULT_FILTER_TYPE})')
     
+    # Add parameters for Kalman filter
+    parser.add_argument('--process-variance',
+                       type=float,
+                       default=1e-5,
+                       help='Process variance parameter for Kalman filter (default: 1e-5)')
+
+    parser.add_argument('--measurement-variance',
+                       type=float, 
+                       default=1e-1,
+                       help='Measurement variance parameter for Kalman filter (default: 0.1)')
+    
+  
     parser.add_argument('--cutoff', 
                       type=float, 
                       default=DEFAULT_CUTOFF,
@@ -101,7 +113,9 @@ def run(args):
             filter_type=args.filter,
             cutoff=args.cutoff,
             fs=args.fs,
-            poly_order=args.poly_order
+            poly_order=args.poly_order,
+            process_variance=args.process_variance,
+            measurement_variance=args.measurement_variance
         )
         
         # Log the final results
