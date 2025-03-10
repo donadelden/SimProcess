@@ -51,7 +51,7 @@ def filter_window(window, epsilon=0.1, target_column=None):
     if target_column and target_column in window.columns:
         filter_columns = [target_column]
     else:
-        # Otherwise, filter all relevant columns
+        # Otherwise, filter all relevant columns EXCEPT noise columns
         if 'frequency' in window.columns:
             filter_columns.append('frequency')
         
@@ -66,6 +66,10 @@ def filter_window(window, epsilon=0.1, target_column=None):
         power_cols = [col for col in window.columns if 'power' in col.lower()]
         filter_columns.extend(power_cols)
     
+    # Exclude any noise columns from filtering
+    filter_columns = [col for col in filter_columns if '_noise_raw' not in col]
+    
+    # Make sure columns exist and are numeric
     filter_columns = [col for col in filter_columns if col in window.columns]
     filter_columns = [col for col in filter_columns if is_numeric_column(window, col)]
     
@@ -90,7 +94,6 @@ def filter_window(window, epsilon=0.1, target_column=None):
     
     return keep_mask
 
-
 def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
     """
     Filter data by applying window-based filtering.
@@ -111,6 +114,9 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
     total_cells = 0
     nullified_cells = 0
     
+    # Only filter the target column, not its noise column
+    filter_columns = [target_column] if target_column else []
+    
     for i in range(0, len(df), window_size):
         window = df.iloc[i:i+window_size]
         
@@ -121,7 +127,7 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
         
         keep_mask = filter_window(window, epsilon, target_column)
         
-        # For single column analysis, only operate on that column
+        # For single column analysis, only operate on that column (not noise)
         if target_column:
             if target_column in keep_mask.columns:
                 total_cells += len(window[target_column])
@@ -129,21 +135,31 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
                 nullified_cells += nullified_values
                 
                 filtered_df.loc[window.index[~keep_mask[target_column]], target_column] = np.nan
+                
+                # If a corresponding noise column exists, nullify noise values at the same positions
+                # This keeps noise and signal aligned
+                noise_column = f"{target_column}_noise_raw"
+                if noise_column in filtered_df.columns:
+                    filtered_df.loc[window.index[~keep_mask[target_column]], noise_column] = np.nan
         else:
-            # For multiple column analysis, operate on all columns
+            # For multiple column analysis, operate on all non-noise columns
             for col in window.columns:
-                if col in keep_mask.columns:
+                if col in keep_mask.columns and '_noise_raw' not in col:
                     total_cells += len(window[col])
                     nullified_values = (~keep_mask[col]).sum()
                     nullified_cells += nullified_values
                     
                     filtered_df.loc[window.index[~keep_mask[col]], col] = np.nan
+                    
+                    # If a corresponding noise column exists, nullify noise values at the same positions
+                    noise_column = f"{col}_noise_raw"
+                    if noise_column in filtered_df.columns:
+                        filtered_df.loc[window.index[~keep_mask[col]], noise_column] = np.nan
     
     logger.info(f"Filtered {nullified_cells}/{total_cells} cells ({nullified_cells/total_cells*100:.2f}%) "
                 f"across {total_windows} windows")
     
     return filtered_df
-
 
 def moving_average_filter(data, window_size):
     """
@@ -211,7 +227,6 @@ def savgol_filter(data, window_size, poly_order):
         numpy.ndarray: Filtered data
     """
     return signal.savgol_filter(data, window_size, poly_order)
-
 
 def extract_noise_signal(df, filter_type='savgol', window_size=5, cutoff=0.1, fs=1.0, 
                         poly_order=2, keep_noise_only=True, target_column=None):

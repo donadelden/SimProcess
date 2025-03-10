@@ -583,98 +583,59 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
         
         # Check if the model has noise features
         has_noise_features = any('noise_' in feature for feature in feature_names)
-        if has_noise_features and not extract_noise:
-            logger.warning("Model was trained with noise features, but noise extraction is disabled")
-            logger.warning("This may reduce classification accuracy")
         
-        # Extract base features
+        # Extract noise from the entire dataset before windowing if needed
+        noise_column = None
+        if has_noise_features and extract_noise:
+            logger.info(f"Extracting noise from entire dataset using {filter_type} filter")
+            
+            # Calculate appropriate window size and poly order for noise extraction
+            noise_window_size = max(window_size//5, 3)  # Ensure minimum window size of 3
+            # Ensure poly order is always less than window size
+            noise_poly_order = min(poly_order, noise_window_size - 1)
+            
+            # Extract noise from the entire dataset
+            noise_df = extract_noise_signal(
+                df, 
+                filter_type=filter_type,
+                window_size=noise_window_size,
+                cutoff=cutoff,
+                fs=fs,
+                poly_order=noise_poly_order,
+                keep_noise_only=True,
+                target_column=target_column
+            )
+            
+            # Add noise column to original dataframe
+            if not noise_df.empty and target_column in noise_df.columns:
+                noise_column = f"{target_column}_noise_raw"
+                df[noise_column] = noise_df[target_column]
+                logger.info(f"Added noise column '{noise_column}' to dataframe")
+            else:
+                logger.warning("Noise extraction failed, proceeding without noise features")
+        
+        # Extract features
         logger.info(f"Extracting features from column '{target_column}'")
         features_df, extracted_features = extract_window_features(
             df, 
             window_size=window_size, 
-            target_column=target_column
+            target_column=target_column,
+            noise_column=noise_column
         )
         
         if features_df.empty:
             logger.error(f"No features could be extracted from the data")
             raise ModelError("No features could be extracted from the data")
             
-        # Extract noise features if needed and not disabled
-        if has_noise_features and extract_noise:
-            logger.info(f"Extracting noise features using {filter_type} filter")
-            
-            # Process each window to extract noise features
-            noise_features = []
-            
-            for i in range(0, len(df), window_size//2):  # 50% overlap
-                window = df.iloc[i:i+window_size].copy()
-                
-                # Skip if window is too small
-                if len(window) < window_size:
-                    continue
-                    
-                # Calculate appropriate window size and poly order for noise extraction
-                noise_window_size = max(window_size//5, 3)  # Ensure minimum window size of 3
-                # Ensure poly order is always less than window size
-                noise_poly_order = min(poly_order, noise_window_size - 1)
-                
-                # Extract noise from the window
-                try:
-                    noise_df = extract_noise_signal(
-                        window, 
-                        filter_type=filter_type,
-                        window_size=noise_window_size,
-                        cutoff=cutoff,
-                        fs=fs,
-                        poly_order=noise_poly_order,
-                        keep_noise_only=True,
-                        target_column=target_column
-                    )
-                except Exception as e:
-                    logger.warning(f"Error extracting noise: {str(e)}")
-                    continue
-                
-                # Skip if noise extraction failed
-                if noise_df.empty or target_column not in noise_df.columns:
-                    continue
-                    
-                # Extract features from the noise signal
-                noise_signal = noise_df[target_column].values
-                if len(noise_signal) > 1:
-                    # Explicitly indicate this is a noise signal
-                    noise_feature_dict = extract_features(noise_signal, is_noise=True)
-                    if noise_feature_dict:
-                        # Add 'noise_' prefix to feature names
-                        # If output_column_prefix is different from target_column, use it for noise features too
-                        noise_feature_dict = {f"noise_{output_column_prefix}_{k}": v for k, v in noise_feature_dict.items()}
-                        noise_features.append(noise_feature_dict)
-            
-            # If we have noise features, create a DataFrame and align with original features
-            if noise_features:
-                noise_df = pd.DataFrame(noise_features)
-                
-                # Make sure we have the same number of rows
-                min_rows = min(len(features_df), len(noise_df))
-                features_df = features_df.iloc[:min_rows].reset_index(drop=True)
-                noise_df = noise_df.iloc[:min_rows].reset_index(drop=True)
-                
-                # Merge noise features with original features
-                for col in noise_df.columns:
-                    features_df[col] = noise_df[col]
-                
-                logger.info(f"Added {len(noise_df.columns)} noise features")
-            else:
-                logger.warning("No noise features could be extracted")
-                if has_noise_features:
-                    logger.warning("Model expects noise features, but none were extracted")
-                    logger.warning("This may reduce classification accuracy")
-        
         # Rename columns if needed to match the model's expected features
         if column_rename and target_column != output_column_prefix:
             rename_map = {}
             for col in features_df.columns:
                 if col.startswith(target_column + '_'):
                     new_col = col.replace(target_column + '_', output_column_prefix + '_', 1)
+                    rename_map[col] = new_col
+                elif col.startswith('noise_' + target_column + '_'):
+                    new_col = col.replace('noise_' + target_column + '_', 'noise_' + output_column_prefix + '_', 1)
                     rename_map[col] = new_col
             
             if rename_map:

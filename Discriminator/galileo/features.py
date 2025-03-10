@@ -384,7 +384,7 @@ def extract_features(signal, is_noise=False):
     
     return features
 
-def extract_window_features(df, window_size=10, target_column=None):
+def extract_window_features(df, window_size=10, target_column=None, noise_column=None):
     """
     Extract features from a sliding window of the data with preprocessing.
     
@@ -392,6 +392,7 @@ def extract_window_features(df, window_size=10, target_column=None):
         df (pandas.DataFrame): DataFrame containing the signal data
         window_size (int): Size of the window for feature extraction
         target_column (str, optional): Specific column to extract features from
+        noise_column (str, optional): Corresponding noise column for target_column
         
     Returns:
         tuple: (pandas.DataFrame of features, list of feature names)
@@ -401,6 +402,11 @@ def extract_window_features(df, window_size=10, target_column=None):
         logger.error(f"Specified column '{target_column}' not found in data")
         logger.info(f"Available columns: {', '.join(df.columns)}")
         return pd.DataFrame(), []
+    
+    # Validate noise_column exists if specified
+    if noise_column and noise_column not in df.columns:
+        logger.warning(f"Specified noise column '{noise_column}' not found in data")
+        noise_column = None
     
     all_features = []
     feature_names = [] 
@@ -416,23 +422,22 @@ def extract_window_features(df, window_size=10, target_column=None):
             continue
         
         # Skip windows with insufficient variance in the target column
-        if target_column:
-            if target_column in window.columns:
-                # Check if data has enough variation to be meaningful
-                signal = window[target_column].values
-                # Skip if standard deviation is extremely low (nearly constant signal)
-                if np.std(signal) < 1e-5:
-                    continue
-                # Skip if range is too small (signal barely changes)
-                if np.ptp(signal) < 1e-4:  # ptp = peak to peak
-                    continue
-                # Skip if most values are repeated (low information content)
-                unique_ratio = len(np.unique(signal)) / len(signal)
-                if unique_ratio < 0.1:  # Less than 10% of values are unique
-                    continue
-                # Skip if signal is mostly zeros
-                if np.mean(signal == 0) > 0.7:  # More than 70% zeros
-                    continue
+        if target_column and target_column in window.columns:
+            # Check if data has enough variation to be meaningful
+            signal = window[target_column].values
+            # Skip if standard deviation is extremely low (nearly constant signal)
+            if np.std(signal) < 1e-5:
+                continue
+            # Skip if range is too small (signal barely changes)
+            if np.ptp(signal) < 1e-4:  # ptp = peak to peak
+                continue
+            # Skip if most values are repeated (low information content)
+            unique_ratio = len(np.unique(signal)) / len(signal)
+            if unique_ratio < 0.1:  # Less than 10% of values are unique
+                continue
+            # Skip if signal is mostly zeros
+            if np.mean(signal == 0) > 0.7:  # More than 70% zeros
+                continue
 
         initial_size = window_size * len(window.columns)
                 
@@ -446,18 +451,27 @@ def extract_window_features(df, window_size=10, target_column=None):
             
         window_features = {}
         
-        # If target_column is specified, only analyze that column
+        # If target_column is specified, extract features from it
         if target_column:
             if target_column in filtered_df.columns:
                 signal = window[target_column].values
                 if len(signal) > 0:
-                    # Determine if the signal is noise
-                    is_noise = "noise" in target_column.lower()
-                    
-                    features = extract_features(signal, is_noise=is_noise)
+                    features = extract_features(signal, is_noise=False)
                     if features:
                         for fname, fval in features.items():
                             feature_name = f"{target_column}_{fname}"
+                            window_features[feature_name] = fval
+                            if feature_name not in feature_names:
+                                feature_names.append(feature_name)
+            
+            # Extract features from pre-extracted noise if available
+            if noise_column and noise_column in filtered_df.columns:
+                noise_signal = window[noise_column].values
+                if len(noise_signal) > 0:
+                    noise_features = extract_features(noise_signal, is_noise=True)
+                    if noise_features:
+                        for fname, fval in noise_features.items():
+                            feature_name = f"noise_{target_column}_{fname}"
                             window_features[feature_name] = fval
                             if feature_name not in feature_names:
                                 feature_names.append(feature_name)
@@ -468,16 +482,26 @@ def extract_window_features(df, window_size=10, target_column=None):
                     if col in filtered_df.columns:
                         signal = window[col].values  
                         if len(signal) > 0:
-                            # Determine if the signal is noise
-                            is_noise = "noise" in col.lower()
-                            
-                            features = extract_features(signal, is_noise=is_noise)
+                            features = extract_features(signal, is_noise=False)
                             if features:
                                 for fname, fval in features.items():
                                     feature_name = f"{col}_{fname}"
                                     window_features[feature_name] = fval
                                     if feature_name not in feature_names:
                                         feature_names.append(feature_name)
+                        
+                        # Check for corresponding noise column
+                        noise_col = f"{col}_noise_raw"
+                        if noise_col in filtered_df.columns:
+                            noise_signal = window[noise_col].values
+                            if len(noise_signal) > 0:
+                                noise_features = extract_features(noise_signal, is_noise=True)
+                                if noise_features:
+                                    for fname, fval in noise_features.items():
+                                        feature_name = f"noise_{col}_{fname}"
+                                        window_features[feature_name] = fval
+                                        if feature_name not in feature_names:
+                                            feature_names.append(feature_name)
         
         if window_features:
             all_features.append(window_features)
@@ -487,7 +511,6 @@ def extract_window_features(df, window_size=10, target_column=None):
         return pd.DataFrame(), feature_names
         
     return pd.DataFrame(all_features), feature_names
-
 
 def clean_features_dataframe(combined_df):
     """
@@ -610,8 +633,39 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
                 logger.info(f"Available columns: {', '.join(df.columns)}")
                 continue
                 
+            # Extract noise from the entire dataset before windowing if requested
+            noise_column = None
+            if extract_noise:
+                logger.info("Extracting noise from entire dataset before windowing")
+                noise_window_size = max(window_size//5, 3)  # Smaller window for noise extraction
+                noise_poly_order = min(poly_order, noise_window_size - 1)
+                
+                noise_df = extract_noise_signal(
+                    df, 
+                    filter_type=filter_type,
+                    window_size=noise_window_size,
+                    cutoff=cutoff,
+                    fs=fs,
+                    poly_order=noise_poly_order,
+                    keep_noise_only=True,
+                    target_column=target_column
+                )
+                
+                # Add noise column to original dataframe
+                if not noise_df.empty and target_column in noise_df.columns:
+                    noise_column = f"{target_column}_noise_raw"
+                    df[noise_column] = noise_df[target_column]
+                    logger.info(f"Added noise column '{noise_column}' to dataframe")
+                else:
+                    logger.warning("Noise extraction failed, proceeding without noise features")
+            
             # Extract features using the same logic as in galileo
-            features_df, feature_names = extract_window_features(df, window_size=window_size, target_column=target_column)
+            features_df, feature_names = extract_window_features(
+                df, 
+                window_size=window_size, 
+                target_column=target_column,
+                noise_column=noise_column
+            )
             
             if features_df.empty:
                 logger.warning(f"No features extracted from {file_name}")
@@ -625,73 +679,13 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
                     if col.startswith(target_column + '_'):
                         new_col = col.replace(target_column + '_', output_column_prefix + '_', 1)
                         rename_map[col] = new_col
+                    elif col.startswith('noise_' + target_column + '_'):
+                        new_col = col.replace('noise_' + target_column + '_', 'noise_' + output_column_prefix + '_', 1)
+                        rename_map[col] = new_col
                 
                 # Rename columns
                 if rename_map:
                     features_df = features_df.rename(columns=rename_map)
-            
-            # Extract noise features if requested
-            if extract_noise:
-                noise_features = []
-                
-                # Process each window to extract noise features
-                for i in range(0, len(df), window_size//2):  # 50% overlap
-                    window = df.iloc[i:i+window_size].copy()
-                    
-                    # Skip if window is too small
-                    if len(window) < window_size:
-                        continue
-                        
-                    # Calculate appropriate window size and poly order for noise extraction
-                    noise_window_size = max(window_size//5, 3)  # Ensure minimum window size of 3
-                    # Ensure poly order is always less than window size
-                    noise_poly_order = min(poly_order, noise_window_size - 1)
-                    
-                    # Extract noise from the window
-                    try:
-                        noise_df = extract_noise_signal(
-                            window, 
-                            filter_type=filter_type,
-                            window_size=noise_window_size,
-                            cutoff=cutoff,
-                            fs=fs,
-                            poly_order=noise_poly_order,
-                            keep_noise_only=True,
-                            target_column=target_column
-                        )
-                    except Exception as e:
-                        logger.warning(f"Error extracting noise: {str(e)}")
-                        continue
-                    
-                    # Skip if noise extraction failed
-                    if noise_df.empty or target_column not in noise_df.columns:
-                        continue
-                        
-                    # Extract features from the noise signal
-                    noise_signal = noise_df[target_column].values
-                    if len(noise_signal) > 1:
-                        # Explicitly indicate this is a noise signal
-                        noise_feature_dict = extract_features(noise_signal, is_noise=True)
-                        if noise_feature_dict:
-                            # Add 'noise_' prefix to feature names
-                            # If output_column_prefix is different from target_column, use it for noise features too
-                            noise_feature_dict = {f"noise_{output_column_prefix}_{k}": v for k, v in noise_feature_dict.items()}
-                            noise_features.append(noise_feature_dict)
-                
-                # If we have noise features, create a DataFrame and align with original features
-                if noise_features:
-                    noise_df = pd.DataFrame(noise_features)
-                    
-                    # Make sure we have the same number of rows
-                    min_rows = min(len(features_df), len(noise_df))
-                    features_df = features_df.iloc[:min_rows].reset_index(drop=True)
-                    noise_df = noise_df.iloc[:min_rows].reset_index(drop=True)
-                    
-                    # Merge noise features with original features
-                    for col in noise_df.columns:
-                        features_df[col] = noise_df[col]
-                    
-                    logger.info(f"Added {len(noise_df.columns)} noise features")
             
             # Add binary label based on filename
             # 1 if "EPIC" is in the filename, 0 otherwise
