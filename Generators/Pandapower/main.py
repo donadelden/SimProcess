@@ -9,7 +9,7 @@ import argparse
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description='Generate power network measurements data'
+        description='Generate power network measurements data with various noise models'
     )
     parser.add_argument(
         'duration',
@@ -33,6 +33,35 @@ def parse_arguments():
         type=float,
         default=50.0,
         help='Base frequency value (default: 50.0)'
+    )
+    # Add noise type selection
+    parser.add_argument(
+        '--noise-type', 
+        type=str, 
+        default='gaussian',
+        choices=['gaussian', 'uniform', 'laplace', 'poisson', 'impulse', 'brownian', 'pink', 'none'],
+        help='Type of noise to apply (default: gaussian)'
+    )
+    # Add noise scale parameter
+    parser.add_argument(
+        '--noise-scale', 
+        type=float, 
+        default=0.01,
+        help='Scale/intensity of the noise (default: 0.01)'
+    )
+    # Add impulse probability
+    parser.add_argument(
+        '--impulse-prob', 
+        type=float, 
+        default=0.01,
+        help='Probability of impulse noise occurrence (default: 0.01)'
+    )
+    # Add poisson lambda
+    parser.add_argument(
+        '--poisson-lambda', 
+        type=float, 
+        default=2.0,
+        help='Lambda parameter for Poisson noise (default: 2.0)'
     )
     return parser.parse_args()
 
@@ -61,8 +90,61 @@ def create_simple_network():
         traceback.print_exc()
         sys.exit(1)
 
-def simulate_measurements(net, timestamp, add_noise=False, freq=50.0, voltage=245.0, current=20.0):
-    """Simulate electrical measurements with optional noise"""
+def add_noise(base_value, noise_config, **kwargs):
+    """
+    Add noise to a base value using specified noise model.
+    
+    Parameters:
+    -----------
+    base_value : float
+        Original value to add noise to
+    noise_config : dict
+        Configuration dictionary for the noise
+    **kwargs : dict
+        Additional parameters for specific noise types
+    """
+    noise_type = noise_config.get('type', 'gaussian')
+    scale = noise_config.get('scale', 0.01)
+    
+    # Apply the selected noise type
+    if noise_type == 'gaussian':
+        return base_value * (1 + np.random.normal(0, scale))
+        
+    elif noise_type == 'uniform':
+        return base_value * (1 + np.random.uniform(-scale, scale))
+        
+    elif noise_type == 'laplace':
+        return base_value * (1 + np.random.laplace(0, scale))
+        
+    elif noise_type == 'poisson':
+        lambda_param = noise_config.get('poisson_lambda', 2.0)
+        return base_value + np.random.poisson(lam=lambda_param) * scale
+        
+    elif noise_type == 'impulse':
+        impulse_prob = noise_config.get('impulse_prob', 0.01)
+        if np.random.rand() < impulse_prob:
+            return base_value + np.random.choice([-0.1, 0.1]) * base_value
+        return base_value
+        
+    elif noise_type == 'brownian':
+        return base_value + np.cumsum(np.random.normal(0, scale, size=1000))[-1]
+        
+    elif noise_type == 'pink':
+        # Simple approximation of pink noise using multiple octaves of noise
+        noise = 0
+        for i in range(1, 5):
+            noise += np.random.normal(0, scale / i)
+        return base_value * (1 + noise)
+        
+    elif noise_type == 'none':
+        return base_value
+        
+    else:
+        # Default to no noise for unknown types
+        return base_value
+
+def simulate_measurements(net, timestamp, noise_config, freq=50.0, voltage=245.0, current=20.0):
+    """Simulate electrical measurements with configurable noise"""
     try:
         pp.runpp(net, calculate_voltage_angles=True)
         
@@ -70,45 +152,71 @@ def simulate_measurements(net, timestamp, add_noise=False, freq=50.0, voltage=24
         base_frequency = freq
         
         bus = 0
-        vm_pu = net.res_bus.vm_pu[bus]
         t = timestamp.timestamp()
         
-        noise = np.random.normal(0, 0.002)
+        # Get base voltage variation (applies to all phases)
+        voltage_variation = 1.0
+        if noise_config['type'] != 'none':
+            voltage_variation = add_noise(1.0, noise_config)
         
-        load_variation = 1.0 + noise
-        
+        # Apply phase angle variations
+        if noise_config['type'] != 'none':
+            angle_1 = 0 + np.random.normal(0, 0.1)
+            angle_2 = -120 + np.random.normal(0, 0.1)
+            angle_3 = 120 + np.random.normal(0, 0.1)
+        else:
+            angle_1 = 0
+            angle_2 = -120
+            angle_3 = 120
+            
+        # Apply voltage noise to each phase
         base_voltage = voltage
-        voltage_variation = 1.0 + np.random.normal(0, 0.001)
+        if noise_config['type'] != 'none':
+            v1 = add_noise(base_voltage * voltage_variation, noise_config)
+            v2 = add_noise(base_voltage * voltage_variation, noise_config)
+            v3 = add_noise(base_voltage * voltage_variation, noise_config)
+        else:
+            v1 = base_voltage * voltage_variation
+            v2 = base_voltage * voltage_variation
+            v3 = base_voltage * voltage_variation
+            
+        # Calculate line-to-line voltages (direct differences as in the original code)
+        v_ab = v1 - v2
+        v_bc = v2 - v3
+        v_ca = v1 - v3
         
-        angle_1 = 0 + (normal(0, 0.5) if add_noise else 0)
-        angle_2 = -120 + (normal(0, 0.5) if add_noise else 0)
-        angle_3 = 120 + (normal(0, 0.5) if add_noise else 0)
-        
-        v1 = base_voltage * voltage_variation * (1 + (normal(0, 0.005) if add_noise else 0))
-        v2 = base_voltage * voltage_variation * (1 + (normal(0, 0.005) if add_noise else 0))
-        v3 = base_voltage * voltage_variation * (1 + (normal(0, 0.005) if add_noise else 0))
-        
-        base_current = current * load_variation
-        current_noise = 0.05 if add_noise else 0
-        i1 = base_current * (1 + normal(0, current_noise) if add_noise else 1)
-        i2 = base_current * (1 + normal(0, current_noise) if add_noise else 1)
-        i3 = base_current * (1 + normal(0, current_noise) if add_noise else 1)
-        
-        # Power factor calculation
+        # Apply current noise to each phase
+        base_current = current
+        if noise_config['type'] != 'none':
+            i1 = add_noise(base_current, noise_config, scale=0.05)
+            i2 = add_noise(base_current, noise_config, scale=0.05)
+            i3 = add_noise(base_current, noise_config, scale=0.05)
+        else:
+            i1 = base_current
+            i2 = base_current
+            i3 = base_current
+            
+        # Apply power factor noise
         base_pf = 0.95
-        pf_load_impact = -0.05 * (load_variation - 1)
-        power_factor = min(0.98, max(0.85, base_pf + pf_load_impact))
+        pf_load_impact = -0.05  # More load = worse power factor
+        if noise_config['type'] != 'none':
+            pf_noise = np.random.normal(0, 0.01)
+            power_factor = min(0.98, max(0.85, base_pf + pf_load_impact + pf_noise))
+        else:
+            power_factor = min(0.98, max(0.85, base_pf + pf_load_impact))
+            
+        # Calculate powers for balanced three-phase system
+        actual_voltage_avg = (v1 + v2 + v3) / 3
+        actual_current_avg = (i1 + i2 + i3) / 3
+        apparent_power = np.sqrt(3) * actual_voltage_avg * actual_current_avg  # S = √3 * V * I
+        real_power = apparent_power * power_factor  # P = S * cos(φ)
+        reactive_power = apparent_power * np.sin(np.arccos(power_factor))  # Q = S * sin(φ)
         
-        apparent_power = np.sqrt(3) * sum([v * i for v, i in zip([v1, v2, v3], [i1, i2, i3])]) / 3
-        real_power = apparent_power * power_factor
-        reactive_power = apparent_power * np.sqrt(1 - power_factor**2)
-
-
-        
-        freq_base = np.sin(2 * np.pi * t / 3600) * 0.02
-        freq_load = -0.01 * (load_variation - 1)
-        freq_noise = normal(0, 0.005) if add_noise else 0
-        frequency = base_frequency + freq_base + freq_load + freq_noise
+        # Apply frequency noise
+        if noise_config['type'] != 'none':
+            frequency = add_noise(base_frequency, noise_config, scale=0.005)
+        else:
+            frequency = base_frequency
         
         measurements.update({
             'timestamp': timestamp,
@@ -118,13 +226,14 @@ def simulate_measurements(net, timestamp, add_noise=False, freq=50.0, voltage=24
             'C1': i1,
             'C2': i2,
             'C3': i3,
-            'V1_V2': v1 - v2,
-            'V2_V3': v2 - v3,
-            'V1_V3': v1 - v3,
+            'V1_V2': v_ab,
+            'V2_V3': v_bc,
+            'V1_V3': v_ca,
             'frequency': frequency,
             'power_real': real_power,
             'power_effective': reactive_power,
-            'power_apparent': apparent_power
+            'power_apparent': apparent_power,
+            'power_factor': power_factor
         })
         
         return measurements
@@ -137,6 +246,15 @@ def simulate_measurements(net, timestamp, add_noise=False, freq=50.0, voltage=24
 def main():
     try:
         args = parse_arguments()
+        
+        # Configure noise parameters based on command line arguments
+        noise_config = {
+            'type': args.noise_type,
+            'scale': args.noise_scale,
+            'impulse_prob': args.impulse_prob,
+            'poisson_lambda': args.poisson_lambda
+        }
+        
         net = create_simple_network()
         
         start_time = datetime.now() 
@@ -144,6 +262,10 @@ def main():
         
         print(f"Generating {args.duration} seconds of data starting from {start_time}")
         print(f"Using voltage={args.voltage}V, current={args.current}A, frequency={args.frequency}Hz")
+        print(f"Noise model: {args.noise_type} with scale {args.noise_scale}")
+        
+        # Create noiseless configuration
+        no_noise_config = {'type': 'none', 'scale': 0}
         
         # Noiseless data
         noiseless_measurements = []
@@ -151,7 +273,7 @@ def main():
             measurements = simulate_measurements(
                 net, 
                 timestamp, 
-                add_noise=False,
+                noise_config=no_noise_config,
                 voltage=args.voltage,
                 current=args.current,
                 freq=args.frequency
@@ -167,13 +289,12 @@ def main():
             measurements = simulate_measurements(
                 net, 
                 timestamp, 
-                add_noise=True,
+                noise_config=noise_config,
                 voltage=args.voltage,
                 current=args.current,
                 freq=args.frequency
             )
             noisy_measurements.append(measurements)
-
         
         df_noisy = pd.DataFrame(noisy_measurements)
         df_noisy.to_csv('Panda.csv', index=False)

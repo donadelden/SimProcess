@@ -27,23 +27,32 @@ META = {
 }
 
 class PowerPlantSim(mosaik_api.Simulator):
-    def __init__(self, add_noise=False):
+    def __init__(self, noise_config=None):
         super().__init__(META)
         self.eid_prefix = 'PowerPlant_'
         self.entities = {}
         self.time = 0
         self.step_size = None
         self._count = 0
-        self.add_noise = add_noise
+        
+        # Default noise configuration
+        self.noise_config = noise_config or {
+            'type': 'gaussian',  # default noise type
+            'scale': 0.01,       # default scale
+            'impulse_prob': 0.01,  # for impulse noise
+            'poisson_lambda': 2.0   # for poisson noise
+        }
+        
         self.base_voltage = 245.0
         self.base_current = 20.0
         self.base_frequency = 50.0
 
-    def init(self, sid, time_resolution=1, step_size=1, add_noise=False, 
+    def init(self, sid, time_resolution=1, step_size=1, noise_config=None, 
              base_voltage=245.0, base_current=20.0, base_frequency=50.0):
         self.time_resolution = time_resolution
         self.step_size = step_size
-        self.add_noise = add_noise
+        if noise_config:
+            self.noise_config = noise_config
         self.base_voltage = base_voltage
         self.base_current = base_current
         self.base_frequency = base_frequency
@@ -62,29 +71,80 @@ class PowerPlantSim(mosaik_api.Simulator):
 
         return entities
 
-    def _calculate_variations(self, t):
+    def add_noise(self, base_value, noise_type=None, scale=None, **kwargs):
+        """
+        Add noise to a base value using specified noise model.
         
-        if self.add_noise:
-            noise = np.random.normal(0, 0.002)
-            return 1.0 + noise
-        
-        return 1.0
-    def _calculate_frequency(self, t, load_variation):
-        freq_base = np.sin(2 * np.pi * t / 3600) * 0.02
-        freq_load = -0.01 * (load_variation - 1)
-        if self.add_noise:
-            freq_noise = np.random.normal(0, 0.005)
-            return self.base_frequency + freq_base + freq_load + freq_noise
-        return self.base_frequency + freq_base + freq_load
-
+        Parameters:
+        -----------
+        base_value : float
+            Original value to add noise to
+        noise_type : str, optional
+            Type of noise to apply (uses config if None)
+        scale : float, optional
+            Scale of noise (uses config if None)
+        **kwargs : dict
+            Additional parameters for specific noise types
+        """
+        # Use config values if not specified
+        if noise_type is None:
+            noise_type = self.noise_config.get('type', 'gaussian')
+        if scale is None:
+            scale = self.noise_config.get('scale', 0.01)
+            
+        # Get additional parameters from noise_config if not in kwargs
+        for key, value in self.noise_config.items():
+            if key not in kwargs and key not in ['type', 'scale']:
+                kwargs[key] = value
+                
+        # Apply the selected noise type
+        if noise_type == 'gaussian':
+            return base_value * (1 + np.random.normal(0, scale))
+            
+        elif noise_type == 'uniform':
+            return base_value * (1 + np.random.uniform(-scale, scale))
+            
+        elif noise_type == 'laplace':
+            return base_value * (1 + np.random.laplace(0, scale))
+            
+        elif noise_type == 'poisson':
+            lambda_param = kwargs.get('poisson_lambda', 2.0)
+            return base_value + np.random.poisson(lam=lambda_param) * scale
+            
+        elif noise_type == 'impulse':
+            impulse_prob = kwargs.get('impulse_prob', 0.01)
+            if np.random.rand() < impulse_prob:
+                return base_value + np.random.choice([-0.1, 0.1]) * base_value
+            return base_value
+            
+        elif noise_type == 'brownian':
+            return base_value + np.cumsum(np.random.normal(0, scale, size=1000))[-1]
+            
+        elif noise_type == 'pink':
+            # Simple approximation of pink noise using multiple octaves of noise
+            noise = 0
+            for i in range(1, 5):
+                noise += np.random.normal(0, scale / i)
+            return base_value * (1 + noise)
+            
+        elif noise_type == 'none':
+            return base_value
+            
+        else:
+            # Default to no noise for unknown types
+            return base_value
+    
     def step(self, time, inputs, max_advance):
         self.time = time
-        omega = 2 * math.pi * self.base_frequency
-        load_variation = self._calculate_variations(time)
-        voltage_variation = 1.0 + np.random.normal(0, 0.001)
-
+        
+        # Get base voltage variation (applies to all phases)
+        voltage_variation = 1.0
+        if self.noise_config['type'] != 'none':
+            voltage_variation = self.add_noise(1.0)
+        
         for eid, attrs in self.entities.items():
-            if self.add_noise:
+            # Apply phase angle variations
+            if self.noise_config['type'] != 'none':
                 angle_1 = 0 + np.random.normal(0, 0.1)
                 angle_2 = -120 + np.random.normal(0, 0.1)
                 angle_3 = 120 + np.random.normal(0, 0.1)
@@ -93,47 +153,59 @@ class PowerPlantSim(mosaik_api.Simulator):
                 angle_2 = -120
                 angle_3 = 120
             
-            if self.add_noise:
-                v1 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.001))
-                v2 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.001))
-                v3 = self.base_voltage * voltage_variation * (1 + np.random.normal(0, 0.001))
+            # Apply voltage noise to each phase
+            if self.noise_config['type'] != 'none':
+                v1 = self.add_noise(self.base_voltage * voltage_variation)
+                v2 = self.add_noise(self.base_voltage * voltage_variation)
+                v3 = self.add_noise(self.base_voltage * voltage_variation)
             else:
                 v1 = self.base_voltage * voltage_variation
                 v2 = self.base_voltage * voltage_variation
                 v3 = self.base_voltage * voltage_variation
             
-            attrs['voltage_ab'] = np.sqrt(v1**2 + v2**2 - 2 * v1 * v2 * np.cos(np.radians(angle_1 - angle_2)))
-            attrs['voltage_bc'] = np.sqrt(v2**2 + v3**2 - 2 * v2 * v3 * np.cos(np.radians(angle_2 - angle_3)))
-            attrs['voltage_ca'] = np.sqrt(v3**2 + v1**2 - 2 * v3 * v1 * np.cos(np.radians(angle_3 - angle_1)))
-            
+            # Set phase voltages
             attrs['voltage_a'] = v1
             attrs['voltage_b'] = v2
             attrs['voltage_c'] = v3
             
-            base_current = self.base_current * load_variation
-            if self.add_noise:
-                attrs['current_a'] = base_current * (1 + np.random.normal(0, 0.05))
-                attrs['current_b'] = base_current * (1 + np.random.normal(0, 0.05))
-                attrs['current_c'] = base_current * (1 + np.random.normal(0, 0.05))
+            # Calculate line-to-line voltages
+            attrs['voltage_ab'] = np.sqrt(v1**2 + v2**2 - 2 * v1 * v2 * np.cos(np.radians(angle_1 - angle_2)))
+            attrs['voltage_bc'] = np.sqrt(v2**2 + v3**2 - 2 * v2 * v3 * np.cos(np.radians(angle_2 - angle_3)))
+            attrs['voltage_ca'] = np.sqrt(v3**2 + v1**2 - 2 * v3 * v1 * np.cos(np.radians(angle_3 - angle_1)))
+            
+            # Apply current noise to each phase
+            base_current = self.base_current
+            if self.noise_config['type'] != 'none':
+                attrs['current_a'] = self.add_noise(base_current, scale=0.05)
+                attrs['current_b'] = self.add_noise(base_current, scale=0.05)
+                attrs['current_c'] = self.add_noise(base_current, scale=0.05)
             else:
                 attrs['current_a'] = base_current
                 attrs['current_b'] = base_current
                 attrs['current_c'] = base_current
             
+            # Apply power factor noise
             base_pf = 0.95
-            pf_load_impact = -0.05 * (load_variation - 1)
-            if self.add_noise:
-                attrs['power_factor'] = min(0.98, max(0.85, base_pf + pf_load_impact + np.random.normal(0, 0.01)))
+            pf_load_impact = -0.05
+            if self.noise_config['type'] != 'none':
+                pf_noise = np.random.normal(0, 0.01)
+                attrs['power_factor'] = min(0.98, max(0.85, base_pf + pf_load_impact + pf_noise))
             else:
                 attrs['power_factor'] = min(0.98, max(0.85, base_pf + pf_load_impact))
             
             # Calculate powers for balanced three-phase system
-            apparent_power = np.sqrt(3) * self.base_voltage * self.base_current  # S = √3 * V * I
+            actual_voltage_avg = (attrs['voltage_a'] + attrs['voltage_b'] + attrs['voltage_c']) / 3
+            actual_current_avg = (attrs['current_a'] + attrs['current_b'] + attrs['current_c']) / 3
+            apparent_power = np.sqrt(3) * actual_voltage_avg * actual_current_avg  # S = √3 * V * I
             attrs['power_apparent'] = apparent_power
             attrs['power_real'] = apparent_power * attrs['power_factor']  # P = S * cos(φ)
             attrs['power_reactive'] = apparent_power * np.sin(np.arccos(attrs['power_factor']))  # Q = S * sin(φ)
             
-            attrs['frequency'] = self._calculate_frequency(time, load_variation)
+            # Apply frequency noise
+            if self.noise_config['type'] != 'none':
+                attrs['frequency'] = self.add_noise(self.base_frequency, scale=0.005)
+            else:
+                attrs['frequency'] = self.base_frequency
 
         return time + self.step_size
 
@@ -144,6 +216,7 @@ class PowerPlantSim(mosaik_api.Simulator):
             for attr in attrs_requested:
                 data[eid][attr] = self.entities[eid][attr]
         return data
+
 
 def preprocess_data(input_file, output_file='processed.csv'):
     """Preprocess the simulation output data."""
@@ -190,7 +263,8 @@ def preprocess_data(input_file, output_file='processed.csv'):
     processed.to_csv(output_file, index=False)
     print(f"Preprocessed data saved to {output_file}")
 
-def run_simulation(duration, with_noise=False, raw_output='results.csv', 
+
+def run_simulation(duration, noise_config=None, raw_output='results.csv', 
                   processed_output='processed.csv', preprocess=True,
                   base_voltage=245.0, base_current=20.0, base_frequency=50.0):
     """Run the power plant simulation and optionally preprocess the results."""
@@ -206,13 +280,17 @@ def run_simulation(duration, with_noise=False, raw_output='results.csv',
         },
     }
 
+    # Print information about the simulation
+    print(f"Starting simulation with {noise_config['type']} noise (scale={noise_config['scale']})...")
+    print(f"Using base voltage={base_voltage}V, current={base_current}A, frequency={base_frequency}Hz")
+
     world = mosaik.World(SIM_CONFIG)
     power_plant = world.start('PowerPlantSim', 
-                            step_size=1, 
-                            add_noise=with_noise,
-                            base_voltage=base_voltage,
-                            base_current=base_current,
-                            base_frequency=base_frequency)
+                             step_size=1, 
+                             noise_config=noise_config,
+                             base_voltage=base_voltage,
+                             base_current=base_current,
+                             base_frequency=base_frequency)
     pp_entities = power_plant.PowerPlant.create(1)
     
     csv_writer = world.start(
@@ -230,8 +308,6 @@ def run_simulation(duration, with_noise=False, raw_output='results.csv',
                  'frequency', 'power_apparent', 'power_real',
                  'power_reactive', 'power_factor')
 
-    print(f"Starting simulation {'with' if with_noise else 'without'} noise...")
-    print(f"Using base voltage={base_voltage}V, current={base_current}A, frequency={base_frequency}Hz")
     world.run(until=duration)
     print(f"Simulation completed. Raw results saved to {raw_output}")
     
@@ -239,27 +315,53 @@ def run_simulation(duration, with_noise=False, raw_output='results.csv',
         print("Starting data preprocessing...")
         preprocess_data(raw_output, processed_output)
 
+
 if __name__ == '__main__':
     import argparse
     
-    parser = argparse.ArgumentParser(description='Run power plant simulation and data processing')
+    parser = argparse.ArgumentParser(description='Run power plant simulation with various noise models')
     parser.add_argument('duration', type=int, help='Simulation duration in seconds')
-    parser.add_argument('--no-noise', action='store_true', help='Disable noise in simulation')
-    parser.add_argument('--processed-output', default='Mosaik.csv', help='Processed output file')
+    
+    # Basic parameters
     parser.add_argument('--voltage', type=float, default=245.0, help='Base voltage value (default: 245.0)')
     parser.add_argument('--current', type=float, default=20.0, help='Base current value (default: 20.0)')
     parser.add_argument('--frequency', type=float, default=50.0, help='Base frequency value (default: 50.0)')
+    parser.add_argument('--processed-output', default='Mosaik.csv', help='Processed output file')
+    
+    # Noise type selection
+    parser.add_argument('--noise-type', type=str, default='gaussian', 
+                        choices=['gaussian', 'uniform', 'laplace', 'poisson', 
+                                 'impulse', 'brownian', 'pink', 'none'],
+                        help='Type of noise to apply (default: gaussian)')
+    
+    # Noise scale (intensity)
+    parser.add_argument('--noise-scale', type=float, default=0.01,
+                        help='Scale/intensity of the noise (default: 0.01)')
+    
+    # Additional noise parameters
+    parser.add_argument('--impulse-prob', type=float, default=0.01,
+                        help='Probability of impulse noise occurrence (default: 0.01)')
+    parser.add_argument('--poisson-lambda', type=float, default=2.0,
+                        help='Lambda parameter for Poisson noise (default: 2.0)')
     
     args = parser.parse_args()
     
     if args.duration <= 0:
         print("Error: Duration must be positive")
         sys.exit(1)
-        
+    
+    # Configure noise parameters based on command line arguments
+    noise_config = {
+        'type': args.noise_type,
+        'scale': args.noise_scale,
+        'impulse_prob': args.impulse_prob,
+        'poisson_lambda': args.poisson_lambda
+    }
+    
     try:
         run_simulation(
             duration=args.duration,
-            with_noise=not args.no_noise,
+            noise_config=noise_config,
             raw_output='results.csv',
             processed_output=args.processed_output,
             base_voltage=args.voltage,
