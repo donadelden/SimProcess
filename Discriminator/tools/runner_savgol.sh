@@ -3,28 +3,22 @@
 # This script extracts features for each column and runs analysis on them
 
 # Define an array of columns to process
-COLUMNS=("C1" "C2" "C3" "V1" "V2" "V3" "frequency" "power_real" "power_effective" "power_apparent")
+COLUMNS=("C1")
+WIDTHS=("5" "10,15" "20" "30" "40" "50" "60" "70" "80" "90" "100")
+FILTERS=("moving_average" "kalman" "butterworth")
 
 # Process each column
 for COLUMN in "${COLUMNS[@]}"; do
+for WIDTH in "${WIDTHS[@]}"; do
+for FILTER in "${FILTERS[@]}"; do
+
     echo "=========================================="
-    echo "Processing column: $COLUMN"
+    echo "Processing column: $COLUMN, width: $WIDTH, filter: $FILTER"
     echo "=========================================="
     
     # Step 1: Extract features for this column
     echo "Extracting features..."
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 5 --output dataset_features/window5/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 10 --output dataset_features/window10/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 15 --output dataset_features/window15/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 20 --output dataset_features/window20/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 30 --output dataset_features/window30/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 40 --output dataset_features/window40/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 50 --output dataset_features/window50/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 60 --output dataset_features/window60/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 70 --output dataset_features/window70/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 80 --output dataset_features/window80/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 90 --output dataset_features/window90/savgol/combined_${COLUMN}_features.csv --filter savgol
-    python3 main.py extract -d dataset/data/ -c "$COLUMN" -w 100 --output dataset_features/window100/savgol/combined_${COLUMN}_features.csv --filter savgol
+    python3 main.py extract -d dataset/ -c "$COLUMN" -w "$WIDTH" --output dataset_features/window${WIDTH}/${FILTER}/combined_${COLUMN}_features.csv --filter "$FILTER"
 
     # Check if extraction was successful
     if [ $? -ne 0 ]; then
@@ -43,6 +37,8 @@ for COLUMN in "${COLUMNS[@]}"; do
     
     echo "Finished processing $COLUMN"
     echo ""
+done
+done
 done
 
 echo "All columns processed."

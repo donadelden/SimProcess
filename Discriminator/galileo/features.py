@@ -441,7 +441,16 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
 
         initial_size = window_size * len(window.columns)
                 
-        window = window.dropna()
+        if target_column:
+            window = window.dropna(subset=[target_column])
+            if noise_column:
+                window = window.dropna(subset=[noise_column])
+        else:
+            columns_to_check = []
+            for category, cols in SIGNAL_TYPES.items():
+                columns_to_check.extend([col for col in cols if col in window.columns])
+            window = window.dropna(subset=columns_to_check, how='all')
+
         
         non_null_count_after = window.count().sum()
         
@@ -688,15 +697,18 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
                     features_df = features_df.rename(columns=rename_map)
             
             # Add binary label based on filename
-            # 1 if "EPIC" is in the filename, 0 otherwise
-            is_real = 1 if "EPIC" in file_name else 0
+            # 1 if "EPIC" or "MORRIS" is in the filename, 0 otherwise
+            is_real = 1 if ("EPIC" in file_name or "MORRIS" in file_name) else 0
             features_df['real'] = is_real
             logger.info(f"Label: {'Real (1)' if is_real else 'Not Real (0)'}")
+            
+            # Add source filename column
+            features_df['source'] = file_name
             
             # Add to the collection
             all_features.append(features_df)
             
-            logger.info(f"Extracted {len(features_df)} windows with {len(features_df.columns) - 1} features")
+            logger.info(f"Extracted {len(features_df)} windows with {len(features_df.columns) - 2} features")  # -2 for 'real' and 'source'
         
         # Check if we have any features
         if not all_features:
@@ -720,7 +732,7 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         combined_df.to_csv(output_file, index=False)
         logger.info(f"\nSuccessfully saved combined features to '{output_file}'")
         logger.info(f"Total windows: {len(combined_df)}")
-        logger.info(f"Total features: {len(combined_df.columns) - 1}")  # -1 for the 'real' label column
+        logger.info(f"Total features: {len(combined_df.columns) - 2}")  # -2 for the 'real' and 'source' columns
         
         return True
     
