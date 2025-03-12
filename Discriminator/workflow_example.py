@@ -1,177 +1,181 @@
 #!/usr/bin/env python3
 """
-Random Forest Workflow Example
+One-Class SVM Training and Testing Script
 
-This script demonstrates a complete workflow using Random Forest instead of SVM:
-1. Extract features from data with specific parameters
-2. Train a Random Forest model using the extracted features
-3. Analyze multiple files with the model
+This script:
+1. Trains a One-Class SVM model for each feature file in dataset_features/window50/moving_average/
+2. Tests each model on specified analysis files
+3. Generates a CSV with metrics about the analysis
+
+By default, the script trains on the "real" class (target_class=1). You can change this with the --target-class argument.
 """
 
 import os
 import logging
 import sys
+import csv
+import re
+import argparse
 from galileo.features import process_csv_files
 from galileo.model import train_with_features, analyze_with_model
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('rf_workflow_example')
+logger = logging.getLogger('ocsvm_training_testing')
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Train and test One-Class SVM models')
+parser.add_argument('--target-class', type=int, choices=[0, 1], default=1,
+                    help='Target class to model (1=real, 0=simulated) (default: 1)')
+parser.add_argument('--nu', type=float, default=0.1,
+                    help='Nu parameter for One-Class SVM (default: 0.1)')
+parser.add_argument('--kernel', type=str, choices=['rbf', 'linear', 'poly', 'sigmoid'], default='rbf',
+                    help='Kernel type for One-Class SVM (default: rbf)')
+parser.add_argument('--gamma', type=str, default='scale',
+                    help='Kernel coefficient for rbf, poly and sigmoid kernels (default: scale)')
+parser.add_argument('--output-dir', type=str, default='ocsvm_output',
+                    help='Directory to store output files (default: ocsvm_output)')
+args = parser.parse_args()
 
 # Define parameters
 WINDOW_SIZE = 20
 FILTER_TYPE = "moving_average"
-TARGET_COLUMN = "C1"
-DATA_DIR = "dataset/data"
-OUTPUT_DIR = "rf_output"
-MODEL_TYPE = "rf"  # Using Random Forest instead of SVM
+OUTPUT_DIR = args.output_dir
+MODEL_TYPE = "rf"
+TARGET_CLASS = args.target_class  # Which class to model (1=real, 0=simulated)
 
-def step1_extract_features():
+# Files to analyze
+FILES_TO_ANALYZE = [
+    {
+        "file": "dataset/4Mosaik+noise.csv",
+        "column": "C1",  # This will be replaced for each model
+        "rename": None,
+    },
+    {
+        "file": "dataset/EPIC2.csv",
+        "column": "C1",  # This will be replaced for each model
+        "rename": None,
+    },
+    
+]
+
+def extract_feature_type(filename):
     """
-    Step 1: Extract features from the dataset.
-    Uses window size 20, moving_average filter, and targets the C1 column.
+    Extract the feature type (C1, C2, frequency, etc.) from the filename.
+    
+    Args:
+        filename (str): Name of the feature file
+        
+    Returns:
+        str: Feature type (e.g., C1, C2, frequency)
     """
-    logger.info("=" * 80)
-    logger.info("STEP 1: EXTRACTING FEATURES")
-    logger.info("=" * 80)
+    match = re.search(r'combined_(.+?)_features\.csv', filename)
+    if match:
+        return match.group(1)
+    return None
+
+def train_model(feature_file, feature_type):
+    """
+    Train a One-Class SVM model using the specified feature file.
+    
+    Args:
+        feature_file (str): Path to the feature file
+        feature_type (str): Type of feature (C1, C2, etc.)
+        
+    Returns:
+        str: Path to the trained model file, or None if training failed
+    """
+    logger.info(f"Training model for feature type: {feature_type}")
+    logger.info(f"Target class: {'real (1)' if TARGET_CLASS == 1 else 'simulated (0)'}")
     
     # Create output directory if it doesn't exist
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     
-    # Define output file for features
-    features_file = os.path.join(OUTPUT_DIR, f"combined_{TARGET_COLUMN}_features.csv")
-    
-    logger.info(f"Extracting features from {DATA_DIR}")
-    logger.info(f"Target column: {TARGET_COLUMN}")
-    logger.info(f"Window size: {WINDOW_SIZE}")
-    logger.info(f"Filter type: {FILTER_TYPE}")
-    
-    try:
-        success = process_csv_files(
-            data_directory=DATA_DIR,
-            output_file=features_file,
-            target_column=TARGET_COLUMN,
-            window_size=WINDOW_SIZE,
-            extract_noise=True,
-            filter_type=FILTER_TYPE
-        )
-        
-        if not success:
-            logger.error("Feature extraction failed")
-            return None
-        
-        logger.info(f"Features successfully extracted to {features_file}")
-        return features_file
-        
-    except Exception as e:
-        logger.error(f"Error during feature extraction: {str(e)}")
-        return None
-
-def step2_train_rf_model(features_file):
-    """
-    Step 2: Train a Random Forest model using the extracted features.
-    
-    Args:
-        features_file (str): Path to the extracted features file
-    
-    Returns:
-        str: Path to the trained model file, or None if training failed
-    """
-    logger.info("\n" + "=" * 80)
-    logger.info("STEP 2: TRAINING RANDOM FOREST MODEL")
-    logger.info("=" * 80)
-    
-    if not features_file or not os.path.exists(features_file):
-        logger.error("Feature file not found. Cannot proceed with training.")
-        return None
-    
     # Define model file path
-    model_file = os.path.join(OUTPUT_DIR, f"{MODEL_TYPE}_model_{TARGET_COLUMN}.joblib")
-    evaluation_report = os.path.join(OUTPUT_DIR, "evaluation_report.csv")
-    
-    logger.info(f"Training {MODEL_TYPE.upper()} model using features from {features_file}")
+    target_class_str = "real" if TARGET_CLASS == 1 else "simulated"
+    model_file = os.path.join(OUTPUT_DIR, f"{MODEL_TYPE}_{target_class_str}_model_{feature_type}.joblib")
+    evaluation_report = os.path.join(OUTPUT_DIR, f"evaluation_report_{feature_type}.csv")
     
     try:
-        # Random Forest specific parameters
-        rf_params = {
-            'n_estimators': 200,  # More trees for better accuracy
-            'max_depth': 20,      # Limit tree depth to prevent overfitting
-            'min_samples_split': 5,  # More samples required for node splitting
-            'min_samples_leaf': 2,   # More samples required at leaf nodes
-            'random_state': 42,
-            'n_jobs': -1          # Use all available CPU cores
-        }
         
         success = train_with_features(
-            features_file=features_file,
+            features_file=feature_file,
             model_path=model_file,
             train_ratio=0.8,
             report_file=evaluation_report,
-            model_type=MODEL_TYPE,  # Specify Random Forest
-            **rf_params  # Pass Random Forest parameters
+            model_type=MODEL_TYPE
         )
         
         if not success:
-            logger.error("Model training failed")
+            logger.error(f"Model training failed for {feature_type}")
             return None
         
-        logger.info(f"Random Forest model successfully trained and saved to {model_file}")
-        logger.info(f"Evaluation report saved to {evaluation_report}")
+        logger.info(f"Model for {feature_type} successfully trained and saved to {model_file}")
         return model_file
         
     except Exception as e:
-        logger.error(f"Error during model training: {str(e)}")
+        logger.error(f"Error during model training for {feature_type}: {str(e)}")
         return None
 
-def step3_analyze_files(model_file):
+def analyze_files(model_file, feature_type):
     """
-    Step 3: Analyze multiple files using the trained Random Forest model.
+    Analyze files using the trained model.
     
     Args:
         model_file (str): Path to the trained model file
-    
+        feature_type (str): Type of feature (C1, C2, etc.)
+        
     Returns:
-        bool: True if all analyses completed successfully, False otherwise
+        list: List of dictionaries with analysis results
     """
-    logger.info("\n" + "=" * 80)
-    logger.info("STEP 3: ANALYZING FILES WITH RANDOM FOREST MODEL")
-    logger.info("=" * 80)
+    logger.info(f"Analyzing files with model for {feature_type}")
+    
+    results = []
     
     if not model_file or not os.path.exists(model_file):
         logger.error("Model file not found. Cannot proceed with analysis.")
-        return False
+        return results
     
-    # Define files to analyze with their parameters
-    files_to_analyze = [
-        {
-            "file": "dataset/gan/generated_data.csv",
-            "column": TARGET_COLUMN,
-            "rename": None,
-            "output_dir": os.path.join(OUTPUT_DIR, "analysis_gan")
-        },
-        {
-            "file": "dataset/data/3Panda.csv",
-            "column": TARGET_COLUMN,
-            "rename": None,
-            "output_dir": os.path.join(OUTPUT_DIR, "analysis_panda")
-        },
-        {
-            "file": "dataset/morris/data6.csv",
-            "column": "R1-PM5:I",
-            "rename": TARGET_COLUMN,
-            "output_dir": os.path.join(OUTPUT_DIR, "analysis_morris")
-        }
-    ]
+    # Morris file column mappings
+    morris_column_map = {
+        "V1": "R1-PM1:V",
+        "V2": "R1-PM2:V",
+        "V3": "R1-PM3:V",
+        "C1": "R1-PM4:I",
+        "C2": "R1-PM5:I",
+        "C3": "R1-PM6:I",
+        "frequency": "R1:F"
+    }
     
-    success_count = 0
-    
-    for file_info in files_to_analyze:
+    for file_info in FILES_TO_ANALYZE:
         file_path = file_info["file"]
-        column = file_info["column"]
-        rename = file_info["rename"]
-        output_dir = file_info["output_dir"]
+        original_column = file_info["column"]
         
-        logger.info(f"\nAnalyzing file: {file_path}")
+        # Handle Morris files specifically
+        is_morris_file = "morris" in file_path
+        
+        # Update column and rename based on feature type
+        if is_morris_file:
+            # If it's a Morris file, use the mapping
+            if feature_type in morris_column_map:
+                column = morris_column_map[feature_type]
+                rename = feature_type
+            else:
+                # Skip this feature if not in mapping for Morris files
+                logger.info(f"Skipping feature {feature_type} for Morris file {file_path}")
+                continue
+        elif feature_type.startswith("C") or feature_type.startswith("V") or feature_type == "frequency":
+            # For non-Morris files, handle normally
+            column = feature_type
+            rename = None if original_column == feature_type else feature_type
+        else:
+            column = original_column
+            rename = original_column  # Keep the original column name
+        
+        target_class_str = "real" if TARGET_CLASS == 1 else "simulated"
+        output_dir = os.path.join(OUTPUT_DIR, f"analysis_{MODEL_TYPE}_{target_class_str}_{feature_type}_{os.path.basename(file_path).split('.')[0]}")
+        
+        logger.info(f"Analyzing file: {file_path}")
         logger.info(f"Column: {column}")
         if rename:
             logger.info(f"Renaming to: {rename}")
@@ -192,45 +196,107 @@ def step3_analyze_files(model_file):
                 filter_type=FILTER_TYPE
             )
             
+            # Add result to list
+            target_class_str = "real" if TARGET_CLASS == 1 else "simulated"
+            result = {
+                "model_used": f"{MODEL_TYPE}_{target_class_str}_{feature_type}_window{WINDOW_SIZE}_{FILTER_TYPE}",
+                "analyzed_file": file_path,
+                "real_windows": metrics['real_windows'],
+                "simulated_windows": metrics['simulated_windows'],
+                "real_windows_ratio": metrics['real_windows'] / metrics['total_windows'] if metrics['total_windows'] > 0 else 0,
+                "simulated_windows_ratio": metrics['simulated_windows'] / metrics['total_windows'] if metrics['total_windows'] > 0 else 0
+            }
+            
+            results.append(result)
+            
             logger.info(f"Analysis complete for {file_path}")
             logger.info(f"Classification: {'REAL' if is_real else 'SIMULATED'} with {confidence:.1f}% confidence")
             logger.info(f"Windows: {metrics['real_windows']} real, {metrics['simulated_windows']} simulated out of {metrics['total_windows']} total")
-            logger.info(f"Results saved to {output_dir}")
-            
-            success_count += 1
             
         except Exception as e:
             logger.error(f"Error analyzing {file_path}: {str(e)}")
     
-    if success_count == len(files_to_analyze):
-        logger.info("\nAll files successfully analyzed.")
-        return True
-    else:
-        logger.warning(f"\n{success_count} out of {len(files_to_analyze)} files successfully analyzed.")
-        return False
+    return results
+
+def write_results_to_csv(results):
+    """
+    Write analysis results to a CSV file.
+    
+    Args:
+        results (list): List of dictionaries with analysis results
+        
+    Returns:
+        str: Path to the CSV file
+    """
+    target_class_str = "real" if TARGET_CLASS == 1 else "simulated"
+    csv_file = os.path.join(OUTPUT_DIR, f"analysis_results_{MODEL_TYPE}_{target_class_str}.csv")
+    
+    with open(csv_file, 'w', newline='') as file:
+        fieldnames = [
+            "model_used", "analyzed_file", "real_windows", "simulated_windows", 
+            "real_windows_ratio", "simulated_windows_ratio"
+        ]
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        
+        writer.writeheader()
+        for result in results:
+            writer.writerow(result)
+    
+    logger.info(f"Results written to {csv_file}")
+    return csv_file
 
 def main():
-    """Run the complete Random Forest workflow."""
-    logger.info("Starting Random Forest workflow example")
+    """Run the complete training and testing workflow."""
+    logger.info("Starting One-Class SVM training and testing workflow")
+    logger.info(f"Target class: {'Real (1)' if TARGET_CLASS == 1 else 'Simulated (0)'}")
     
-    # Step 1: Extract features
-    features_file = step1_extract_features()
-    if not features_file:
-        logger.error("Feature extraction failed. Workflow cannot continue.")
+    # Create output directory if it doesn't exist
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    
+    # Get all feature files in the specified directory
+    feature_dir = "dataset_features/window50/moving_average/"
+    all_files = [f for f in os.listdir(feature_dir) if f.endswith('_features.csv')]
+    
+    # Filter out power feature files if requested
+    feature_files = [
+        os.path.join(feature_dir, f) for f in all_files 
+    ]
+    
+    if not feature_files:
+        logger.error(f"No feature files found in {feature_dir}")
         return 1
     
-    # Step 2: Train Random Forest model
-    model_file = step2_train_rf_model(features_file)
-    if not model_file:
-        logger.error("Model training failed. Workflow cannot continue.")
-        return 1
+    logger.info(f"Found {len(feature_files)} feature files")
     
-    # Step 3: Analyze files
-    analysis_success = step3_analyze_files(model_file)
+    all_results = []
     
-    logger.info("\nRandom Forest workflow complete.")
+    for feature_file in feature_files:
+        # Extract feature type from filename
+        feature_type = extract_feature_type(os.path.basename(feature_file))
+        if not feature_type:
+            logger.warning(f"Could not extract feature type from {feature_file}, skipping")
+            continue
+        
+        # Train model
+        model_file = train_model(feature_file, feature_type)
+        if not model_file:
+            logger.warning(f"Model training failed for {feature_file}, skipping analysis")
+            continue
+        
+        # Analyze files
+        results = analyze_files(model_file, feature_type)
+        all_results.extend(results)
     
-    return 0 if analysis_success else 1
+    # Write results to CSV
+    if all_results:
+        target_class_str = "real" if TARGET_CLASS == 1 else "simulated"
+        csv_file = write_results_to_csv(all_results)
+        logger.info(f"All results saved to {csv_file}")
+    else:
+        logger.warning("No analysis results to save")
+    
+    logger.info("Training and testing workflow complete")
+    return 0
 
 if __name__ == "__main__":
     sys.exit(main())

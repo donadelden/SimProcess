@@ -50,7 +50,22 @@ def split_features_dataset(features_file, train_ratio=0.8, random_seed=42, noise
         raise ModelError("Missing 'real' column in features file")
     
     # Extract features and labels
-    X = df.drop('real', axis=1)
+    # Identify non-feature columns (label and any string/object columns)
+    columns_to_drop = ['real']
+    
+    # Check for and drop 'source' column which contains filenames
+    if 'source' in df.columns:
+        columns_to_drop.append('source')
+        logger.info("Detected 'source' column with filenames - excluding from features")
+    
+    # Also check for and drop any other string/object columns
+    for col in df.columns:
+        if col not in columns_to_drop:  # Skip if already in drop list
+            if df[col].dtype == 'object' or df[col].dtype == 'string':
+                columns_to_drop.append(col)
+                logger.info(f"Excluding non-numeric column '{col}' from features")
+    
+    X = df.drop(columns_to_drop, axis=1)
     y = df['real']
     
     # Filter for noise features only if requested
@@ -91,7 +106,6 @@ def split_features_dataset(features_file, train_ratio=0.8, random_seed=42, noise
     
     feature_names = X.columns.tolist()
     return X_train, X_test, y_train, y_test, feature_names
-
 
 def calculate_feature_importance(model, X, y, feature_names, model_type="svm"):
     """

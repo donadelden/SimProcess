@@ -66,16 +66,32 @@ def calculate_feature_importance(features_df, target_col='real'):
             logger.warning(f"No '{target_col}' column found, skipping")
             return None
         
+        # Make a copy of the dataframe to avoid modifying the original
+        df = features_df.copy()
+        
+        # Remove non-numeric columns that aren't features (target and source)
+        columns_to_drop = [target_col]
+        
+        # Check for and remove the 'source' column which contains filenames
+        if 'source' in df.columns:
+            columns_to_drop.append('source')
+        
+        # Also remove any other string columns that might cause issues
+        for col in df.columns:
+            if df[col].dtype == 'object' or df[col].dtype == 'string':
+                if col not in columns_to_drop:
+                    columns_to_drop.append(col)
+        
         # Prepare data for feature importance calculation
-        X = features_df.drop(target_col, axis=1)
-        y = features_df[target_col]
+        X = df.drop(columns_to_drop, axis=1)
+        y = df[target_col]
         
         # Handle potential NaN values
         X = X.fillna(0)
         
         # Check if we have enough features and samples
         if X.shape[1] == 0:
-            logger.warning(f"No features found after dropping '{target_col}', skipping")
+            logger.warning(f"No features found after dropping non-numeric columns, skipping")
             return None
             
         if X.shape[0] < 10:
@@ -117,7 +133,7 @@ def calculate_feature_importance(features_df, target_col='real'):
     except Exception as e:
         logger.error(f"Error calculating feature importance: {str(e)}")
         return None
-
+    
 def process_csv_file(csv_path):
     """Process a single CSV file and save feature importance results in the same location"""
     try:
