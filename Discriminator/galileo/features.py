@@ -384,7 +384,7 @@ def extract_features(signal, is_noise=False):
     
     return features
 
-def extract_window_features(df, window_size=10, target_column=None, noise_column=None):
+def extract_window_features(df, window_size=10, target_column=None, noise_column=None, epsilon=0.1):
     """
     Extract features from a sliding window of the data with preprocessing.
     
@@ -393,6 +393,7 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
         window_size (int): Size of the window for feature extraction
         target_column (str, optional): Specific column to extract features from
         noise_column (str, optional): Corresponding noise column for target_column
+        epsilon (float): Epsilon value for filtering outliers
         
     Returns:
         tuple: (pandas.DataFrame of features, list of feature names)
@@ -411,7 +412,8 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
     all_features = []
     feature_names = [] 
     
-    epsilon = 0.08 
+    # Filter data using the specified epsilon value
+    logger.info(f"Filtering data with epsilon={epsilon}")
     filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon, target_column=target_column)
     
     for i in range(0, len(filtered_df), window_size//2):  # 50% overlap
@@ -423,18 +425,30 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
         
         # Skip windows with insufficient variance in the target column
         if target_column and target_column in window.columns:
+            # Skip if there's not enough data
+            if window[target_column].isna().sum() > window_size * 0.4:  # More than 40% NaN
+                continue
+                
             # Check if data has enough variation to be meaningful
-            signal = window[target_column].values
+            signal = window[target_column].dropna().values
+            
+            # Skip if no valid data
+            if len(signal) == 0:
+                continue
+                
             # Skip if standard deviation is extremely low (nearly constant signal)
             if np.std(signal) < 1e-5:
                 continue
+                
             # Skip if range is too small (signal barely changes)
             if np.ptp(signal) < 1e-4:  # ptp = peak to peak
                 continue
+                
             # Skip if most values are repeated (low information content)
             unique_ratio = len(np.unique(signal)) / len(signal)
             if unique_ratio < 0.1:  # Less than 10% of values are unique
                 continue
+                
             # Skip if signal is mostly zeros
             if np.mean(signal == 0) > 0.7:  # More than 70% zeros
                 continue
@@ -446,6 +460,9 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
             if noise_column:
                 window = window.dropna(subset=[noise_column])
         else:
+            # Import SIGNAL_TYPES from core module
+            from galileo.core import SIGNAL_TYPES
+            
             columns_to_check = []
             for category, cols in SIGNAL_TYPES.items():
                 columns_to_check.extend([col for col in cols if col in window.columns])
@@ -576,24 +593,29 @@ def clean_features_dataframe(combined_df):
     return cleaned_df
 
 
-def process_csv_files(data_directory, output_file=None, target_column='V1', window_size=10, 
+def process_csv_files(data_directory, output_file=None, target_column=None, window_size=10, 
                   extract_noise=True, filter_type='savgol', cutoff=0.1, fs=1.0, poly_order=2, 
-                  output_column_prefix=None, process_variance=1e-5, measurement_variance=1e-1):
+                  output_column_prefix=None, process_variance=1e-5, measurement_variance=1e-1,
+                  epsilon=0.1, all_columns=False):
     """
-    Process all CSV files in the given directory, extract features from specified column,
+    Process all CSV files in the given directory, extract features from specified column or all columns in parallel,
     and combine them into a single CSV file.
     
     Args:
         data_directory (str): Directory containing CSV files
         output_file (str, optional): Path to save the combined features. If None, auto-generated based on column name
-        target_column (str): Column to extract features from (default: 'V1')
+        target_column (str, optional): Column to extract features from. If None and all_columns is True, features are extracted from all suitable columns
         window_size (int): Size of the window for feature extraction
         extract_noise (bool): Whether to extract noise features
-        filter_type (str): Type of filter to use for noise extraction ('moving_average', 'butterworth', 'savgol')
+        filter_type (str): Type of filter to use for noise extraction ('moving_average', 'butterworth', 'savgol', 'kalman')
         cutoff (float): Cutoff frequency for Butterworth filter
         fs (float): Sampling frequency for Butterworth filter
         poly_order (int): Polynomial order for Savitzky-Golay filter
         output_column_prefix (str, optional): Prefix to use for output column names. If None, uses target_column
+        epsilon (float): Epsilon value for filtering outliers
+        all_columns (bool): Whether to extract features from all suitable columns in parallel
+        process_variance (float): Process variance parameter for Kalman filter
+        measurement_variance (float): Measurement variance parameter for Kalman filter
     
     Returns:
         bool: True if successful, False otherwise
@@ -602,15 +624,17 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         # Check if the directory exists
         validate_directory(data_directory)
         
+        # Import required functions from core
+        from galileo.core import is_numeric_column, SIGNAL_TYPES
+        
         # Generate default output filename if not provided
         if output_file is None:
-            output_file = f"combined_{target_column}_features.csv"
-        
-        # Use target_column as the output column prefix if not specified
-        if output_column_prefix is None:
-            output_column_prefix = target_column
-        else:
-            logger.info(f"Using '{output_column_prefix}' as prefix for feature names instead of '{target_column}'")
+            if target_column:
+                output_file = f"combined_{target_column}_features.csv"
+            elif all_columns:
+                output_file = "combined_all_columns_features.csv"
+            else:
+                output_file = "combined_features.csv"
         
         # Find all CSV files in the directory
         csv_files = [f for f in os.listdir(data_directory) if f.lower().endswith('.csv')]
@@ -620,7 +644,6 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
             return False
         
         logger.info(f"Found {len(csv_files)} CSV files to process")
-        logger.info(f"Extracting features from column: {target_column}")
         
         # List to store all features DataFrames
         all_features = []
@@ -636,79 +659,163 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
                 logger.warning(f"Skipping {file_name} due to loading error")
                 continue
             
-            # Check if target column exists
-            if target_column not in df.columns:
-                logger.warning(f"Column '{target_column}' not found in {file_name}")
-                logger.info(f"Available columns: {', '.join(df.columns)}")
-                continue
+            # Identify columns to process
+            if all_columns:
+                # Get all available numeric columns that are relevant for signal analysis
+                target_columns = []
+                for category, cols in SIGNAL_TYPES.items():
+                    for col in cols:
+                        if col in df.columns and is_numeric_column(df, col):
+                            target_columns.append(col)
                 
-            # Extract noise from the entire dataset before windowing if requested
-            noise_column = None
+                # If no columns were found from SIGNAL_TYPES, select all numeric columns except timestamp and date
+                if not target_columns:
+                    for col in df.columns:
+                        if col not in ['timestamp', 'date'] and is_numeric_column(df, col):
+                            target_columns.append(col)
+                
+                logger.info(f"Found {len(target_columns)} suitable columns for feature extraction: {', '.join(target_columns)}")
+            else:
+                # Check if target column exists
+                if target_column not in df.columns:
+                    logger.warning(f"Column '{target_column}' not found in {file_name}")
+                    logger.info(f"Available columns: {', '.join(df.columns)}")
+                    continue
+                target_columns = [target_column]
+            
+            # Extract noise from the entire dataset for all relevant columns
+            noise_columns = {}
             if extract_noise:
-                logger.info("Extracting noise from entire dataset before windowing")
                 noise_window_size = max(window_size//5, 3)  # Smaller window for noise extraction
                 noise_poly_order = min(poly_order, noise_window_size - 1)
                 
-                noise_df = extract_noise_signal(
+                for col in target_columns:
+                    logger.info(f"Extracting noise from column '{col}'")
+                    noise_df = extract_noise_signal(
+                        df, 
+                        filter_type=filter_type,
+                        window_size=noise_window_size,
+                        cutoff=cutoff,
+                        fs=fs,
+                        poly_order=noise_poly_order,
+                        keep_noise_only=True,
+                        target_column=col
+                    )
+                    
+                    # Add noise column to original dataframe
+                    if not noise_df.empty and col in noise_df.columns:
+                        noise_column = f"{col}_noise_raw"
+                        df[noise_column] = noise_df[col]
+                        noise_columns[col] = noise_column
+                        logger.info(f"Added noise column '{noise_column}' to dataframe")
+                    else:
+                        logger.warning(f"Noise extraction failed for column '{col}', proceeding without noise features")
+            
+            # If processing all columns in parallel, we need to extract features from windows
+            # that contain data from all target columns
+            if all_columns:
+                logger.info(f"Extracting features from all columns in parallel with epsilon={epsilon}")
+                
+                # Filter data using the specified epsilon value
+                filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon)
+                
+                # Process windows with 50% overlap
+                window_features_list = []
+                for i in range(0, len(filtered_df), window_size//2):
+                    window = filtered_df.iloc[i:i+window_size].copy()
+                    
+                    # Skip if window is too small
+                    if len(window) < window_size:
+                        continue
+                    
+                    window_features = {}
+                    valid_window = True
+                    
+                    # Check if we have sufficient valid data for all target columns
+                    for col in target_columns:
+                        if col not in window.columns or window[col].isna().all():
+                            valid_window = False
+                            break
+                        
+                        # Check if data has enough variation to be meaningful
+                        signal = window[col].dropna().values
+                        if len(signal) < window_size * 0.6:  # Require at least 60% valid data
+                            valid_window = False
+                            break
+                        
+                        # Skip if standard deviation is extremely low (nearly constant signal)
+                        if np.std(signal) < 1e-5:
+                            valid_window = False
+                            break
+                            
+                        # Skip if range is too small (signal barely changes)
+                        if np.ptp(signal) < 1e-4:  # ptp = peak to peak
+                            valid_window = False
+                            break
+                    
+                    if not valid_window:
+                        continue
+                    
+                    # Extract features for each target column
+                    for col in target_columns:
+                        signal = window[col].values
+                        
+                        # Extract regular features
+                        features = extract_features(signal, is_noise=False)
+                        if features:
+                            for fname, fval in features.items():
+                                feature_name = f"{col}_{fname}"
+                                window_features[feature_name] = fval
+                        
+                        # Extract noise features if available
+                        if col in noise_columns:
+                            noise_col = noise_columns[col]
+                            if noise_col in window.columns:
+                                noise_signal = window[noise_col].values
+                                noise_features = extract_features(noise_signal, is_noise=True)
+                                if noise_features:
+                                    for fname, fval in noise_features.items():
+                                        feature_name = f"noise_{col}_{fname}"
+                                        window_features[feature_name] = fval
+                    
+                    if window_features:
+                        window_features_list.append(window_features)
+                
+                if window_features_list:
+                    # Create a DataFrame with all features
+                    features_df = pd.DataFrame(window_features_list)
+                    
+                    # Add metadata
+                    is_real = 1 if ("EPIC" in file_name or "MORRIS" in file_name) else 0
+                    features_df['real'] = is_real
+                    features_df['source'] = file_name
+                    
+                    all_features.append(features_df)
+                    logger.info(f"Extracted {len(features_df)} windows with {len(features_df.columns) - 2} features")
+            else:
+                # Process a single target column
+                logger.info(f"Extracting features from column '{target_column}' with epsilon={epsilon}")
+                col = target_column
+                noise_col = noise_columns.get(col) if col in noise_columns else None
+                
+                features_df, _ = extract_window_features(
                     df, 
-                    filter_type=filter_type,
-                    window_size=noise_window_size,
-                    cutoff=cutoff,
-                    fs=fs,
-                    poly_order=noise_poly_order,
-                    keep_noise_only=True,
-                    target_column=target_column
+                    window_size=window_size, 
+                    target_column=col,
+                    noise_column=noise_col,
+                    epsilon=epsilon
                 )
                 
-                # Add noise column to original dataframe
-                if not noise_df.empty and target_column in noise_df.columns:
-                    noise_column = f"{target_column}_noise_raw"
-                    df[noise_column] = noise_df[target_column]
-                    logger.info(f"Added noise column '{noise_column}' to dataframe")
+                if not features_df.empty:
+                    # Add metadata
+                    is_real = 1 if ("EPIC" in file_name or "MORRIS" in file_name) else 0
+                    features_df['real'] = is_real
+                    features_df['source'] = file_name
+                    
+                    all_features.append(features_df)
+                    logger.info(f"Extracted {len(features_df)} windows with {len(features_df.columns) - 2} features from column '{col}'")
                 else:
-                    logger.warning("Noise extraction failed, proceeding without noise features")
-            
-            # Extract features using the same logic as in galileo
-            features_df, feature_names = extract_window_features(
-                df, 
-                window_size=window_size, 
-                target_column=target_column,
-                noise_column=noise_column
-            )
-            
-            if features_df.empty:
-                logger.warning(f"No features extracted from {file_name}")
-                continue
-                
-            # Rename columns if a different output column prefix is specified
-            if output_column_prefix != target_column:
-                # Create a mapping for column renaming
-                rename_map = {}
-                for col in features_df.columns:
-                    if col.startswith(target_column + '_'):
-                        new_col = col.replace(target_column + '_', output_column_prefix + '_', 1)
-                        rename_map[col] = new_col
-                    elif col.startswith('noise_' + target_column + '_'):
-                        new_col = col.replace('noise_' + target_column + '_', 'noise_' + output_column_prefix + '_', 1)
-                        rename_map[col] = new_col
-                
-                # Rename columns
-                if rename_map:
-                    features_df = features_df.rename(columns=rename_map)
-            
-            # Add binary label based on filename
-            # 1 if "EPIC" or "MORRIS" is in the filename, 0 otherwise
-            is_real = 1 if ("EPIC" in file_name or "MORRIS" in file_name) else 0
-            features_df['real'] = is_real
-            logger.info(f"Label: {'Real (1)' if is_real else 'Not Real (0)'}")
-            
-            # Add source filename column
-            features_df['source'] = file_name
-            
-            # Add to the collection
-            all_features.append(features_df)
-            
-            logger.info(f"Extracted {len(features_df)} windows with {len(features_df.columns) - 2} features")  # -2 for 'real' and 'source'
+                    logger.warning(f"No features extracted from column '{col}' in {file_name}")
         
         # Check if we have any features
         if not all_features:
@@ -717,9 +824,6 @@ def process_csv_files(data_directory, output_file=None, target_column='V1', wind
         
         # Combine all features into a single DataFrame
         combined_df = pd.concat(all_features, ignore_index=True)
-        
-        # Clean the features dataframe
-        #combined_df = clean_features_dataframe(combined_df)
         
         # Count the number of real and not real samples
         real_count = combined_df['real'].sum()

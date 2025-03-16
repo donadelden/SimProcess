@@ -39,12 +39,17 @@ def filter_window(window, epsilon=0.1, target_column=None):
     
     Args:
         window (pandas.DataFrame): Window of data to filter
-        epsilon (float): Tolerance as a percentage
+        epsilon (float): Tolerance as a percentage (higher values are more permissive)
         target_column (str, optional): Specific column to filter. If provided, only this column will be filtered.
         
     Returns:
         pandas.DataFrame: Mask of values to keep
     """
+    # Import required modules
+    import pandas as pd
+    import numpy as np
+    from galileo.core import is_numeric_column, SIGNAL_TYPES
+    
     filter_columns = []
     
     # If target column is specified, only filter that column
@@ -85,8 +90,16 @@ def filter_window(window, epsilon=0.1, target_column=None):
             
         avg = window[column].mean()
         
+        # Apply epsilon as a percentage of the mean
+        # Higher epsilon values will be more permissive in what data is kept
         lower_bound = avg - abs(avg * epsilon)
         upper_bound = avg + abs(avg * epsilon)
+        
+        # For very low values close to zero, ensure a minimal absolute range
+        min_range = 1e-5
+        if abs(upper_bound - lower_bound) < min_range:
+            lower_bound = avg - min_range
+            upper_bound = avg + min_range
         
         within_range = (window[column] >= lower_bound) & (window[column] <= upper_bound)
         
@@ -101,13 +114,16 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
     Args:
         df (pandas.DataFrame): Data to filter
         window_size (int): Size of the window for filtering
-        epsilon (float): Tolerance as a percentage
+        epsilon (float): Tolerance as a percentage (higher values are more permissive)
         target_column (str, optional): Specific column to filter. If provided, only this column will be filtered
                                       and rows will only be dropped if this column contains null values.
         
     Returns:
         pandas.DataFrame: Filtered data
     """
+    # Import required modules
+    import numpy as np
+    
     filtered_df = df.copy()
     
     total_windows = 0
@@ -116,6 +132,8 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
     
     # Only filter the target column, not its noise column
     filter_columns = [target_column] if target_column else []
+    
+    logger.info(f"Filtering data with epsilon={epsilon}")
     
     for i in range(0, len(df), window_size):
         window = df.iloc[i:i+window_size]
@@ -156,8 +174,11 @@ def filter_data(df, window_size=10, epsilon=0.1, target_column=None):
                     if noise_column in filtered_df.columns:
                         filtered_df.loc[window.index[~keep_mask[col]], noise_column] = np.nan
     
-    logger.info(f"Filtered {nullified_cells}/{total_cells} cells ({nullified_cells/total_cells*100:.2f}%) "
-                f"across {total_windows} windows")
+    if total_cells > 0:
+        logger.info(f"Filtered {nullified_cells}/{total_cells} cells ({nullified_cells/total_cells*100:.2f}%) "
+                    f"across {total_windows} windows")
+    else:
+        logger.warning("No data was filtered (no suitable cells found)")
     
     return filtered_df
 
