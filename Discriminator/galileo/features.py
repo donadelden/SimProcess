@@ -416,7 +416,7 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
     logger.info(f"Filtering data with epsilon={epsilon}")
     filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon, target_column=target_column)
     
-    for i in range(0, len(filtered_df), window_size//2):  # 50% overlap
+    for i in range(0, len(filtered_df), window_size//5):  # 80% overlap
         window = filtered_df.iloc[i:i+window_size].copy()
         
         # Skip if window is too small
@@ -719,9 +719,9 @@ def process_csv_files(data_directory, output_file=None, target_column=None, wind
                 # Filter data using the specified epsilon value
                 filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon)
                 
-                # Process windows with 50% overlap
+                # Process windows with 80% overlap
                 window_features_list = []
-                for i in range(0, len(filtered_df), window_size//2):
+                for i in range(0, len(filtered_df), window_size//5):
                     window = filtered_df.iloc[i:i+window_size].copy()
                     
                     # Skip if window is too small
