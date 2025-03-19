@@ -31,7 +31,7 @@ DEFAULT_MEASUREMENT_VARIANCE = 1e-1
 SIGNAL_TYPES = {
     'current': ['C1', 'C2', 'C3'],
     'voltage': ['V1', 'V2', 'V3'],
-    'power': ['power_real', 'power_effective', 'power_apparent'],
+    'power': ['power_real', 'power_reactive', 'power_apparent'],
     'frequency': ['frequency']
 }
 

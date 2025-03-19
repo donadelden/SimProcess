@@ -418,7 +418,7 @@ def preprocess_data(input_file, output_file='processed.csv'):
     
     power_map = {
         'PowerPlantSim-0.PowerPlant_0-power_real': 'power_real',
-        'PowerPlantSim-0.PowerPlant_0-power_reactive': 'power_effective',
+        'PowerPlantSim-0.PowerPlant_0-power_reactive': 'power_reactive',
         'PowerPlantSim-0.PowerPlant_0-power_apparent': 'power_apparent'
     }
     

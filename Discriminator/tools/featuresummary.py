@@ -34,7 +34,7 @@ def extract_feature_type(filename):
         return freq_match.group(1)
     
     # Handle patterns like combined_power_real_features.csv
-    power_pattern = r'combined_power_(real|apparent|effective)_features\.csv'
+    power_pattern = r'combined_power_(real|apparent|reactive)_features\.csv'
     power_match = re.search(power_pattern, filename)
     if power_match:
         return f"power_{power_match.group(1)}"

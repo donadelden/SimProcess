@@ -4,7 +4,7 @@
 
 # Define an array of columns to process
 COLUMNS=("C1")
-WIDTHS=("5" "10,15" "20" "30" "40" "50" "60" "70" "80" "90" "100")
+WIDTHS=("5" "10" "15" "20" "30" "40" "50" "60" "70" "80" "90" "100")
 FILTERS=(no-noise)
 
 # Process each column

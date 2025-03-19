@@ -139,7 +139,7 @@ def main():
         'voltage': ['V1', 'V2', 'V3'],
         'current': ['C1', 'C2', 'C3'],
         'voltage_diff': ['V1_V2', 'V2_V3', 'V1_V3'],
-        'power': ['power_real', 'power_effective', 'power_apparent'],
+        'power': ['power_real', 'power_reactive', 'power_apparent'],
         'frequency': ['frequency']
     }
     

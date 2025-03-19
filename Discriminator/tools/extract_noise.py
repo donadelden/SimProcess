@@ -83,7 +83,7 @@ def extract_noise(file_path, output_file=None, process_variance=1e-5, measuremen
     signal_types = {
         'current': ['C1', 'C2', 'C3'],
         'voltage': ['V1', 'V2', 'V3'],
-        'power': ['power_real', 'power_effective', 'power_apparent'],
+        'power': ['power_real', 'power_reactive', 'power_apparent'],
         'frequency': ['frequency']
     }
     

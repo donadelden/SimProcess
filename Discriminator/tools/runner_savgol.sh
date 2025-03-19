@@ -4,8 +4,8 @@
 
 # Define an array of columns to process
 COLUMNS=("C1")
-WIDTHS=("5" "10,15" "20" "30" "40" "50" "60" "70" "80" "90" "100")
-FILTERS=("moving_average" "kalman" "butterworth")
+WIDTHS=("5" "10" "15" "20" "30" "40" "50" "60" "70" "80" "90" "100")
+FILTERS=("kalman")
 
 # Process each column
 for COLUMN in "${COLUMNS[@]}"; do

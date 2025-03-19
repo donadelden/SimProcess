@@ -499,7 +499,7 @@ def simulate_measurements(net, timestamp, noise_generator, freq=50.0, voltage=24
             'V1_V3': v_ca,
             'frequency': frequency,
             'power_real': real_power,
-            'power_effective': reactive_power,
+            'power_reactive': reactive_power,
             'power_apparent': apparent_power,
             'power_factor': power_factor
         })

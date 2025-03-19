@@ -46,13 +46,13 @@ chmod +x run_extraction_filter.sh
 chmod +x run_extraction_no_noise.sh
 
 # Define an array of columns to process
-COLUMNS=("C1" "C2" "C3" "V1" "V2" "V3" "frequency" "power_real" "power_effective" "power_apparent")
+COLUMNS=("C1" "C2" "C3" "V1" "V2" "V3" "frequency" "power_real" "power_reactive" "power_apparent")
 
 # Define window sizes
 WINDOWS=(5 10 15 20 30 40 50 60 70 80 90 100)
 
 # Define the filters to use
-FILTERS=("savgol" "moving_average" "kalman" "butterworth")
+FILTERS=("kalman")
 
 echo "Starting parallel feature extraction with multiple filters..."
 echo "=========================================="
@@ -74,7 +74,7 @@ echo "Starting parallel feature extraction with no noise..."
 echo "=========================================="
 
 # Run the extractions with no noise in parallel
-parallel --progress --bar "./run_extraction_no_noise.sh {1} {2}" ::: "${COLUMNS[@]}" ::: "${WINDOWS[@]}"
+#parallel --progress --bar "./run_extraction_no_noise.sh {1} {2}" ::: "${COLUMNS[@]}" ::: "${WINDOWS[@]}"
 
 if [ $? -ne 0 ]; then
     echo "Some no-noise extraction jobs failed. Check the output above for details."

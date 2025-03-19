@@ -490,14 +490,14 @@ def train_with_features(features_file, model_path, train_ratio=0.8, random_seed=
                 elif potential_column == "frequency":
                     column_name = potential_column
             
-            # Handle power types (power_real, power_apparent, power_effective)
+            # Handle power types (power_real, power_apparent, power_reactive)
             if "power" in file_basename:
                 if "power_real" in file_basename:
                     column_name = "power_real"
                 elif "power_apparent" in file_basename:
                     column_name = "power_apparent"
-                elif "power_effective" in file_basename:
-                    column_name = "power_effective"
+                elif "power_reactive" in file_basename:
+                    column_name = "power_reactive"
                 elif len(parts) >= 2 and parts[1] == "power":
                     column_name = "power"  # Generic fallback if specific power type not identified
                     

@@ -27,7 +27,7 @@ def preprocess_data(input_file):
     
     power_map = {
         'Generation.GIED1.Measurement.Real': 'power_real',
-        'Generation.GIED1.Measurement.Reactive': 'power_effective',
+        'Generation.GIED1.Measurement.Reactive': 'power_reactive',
         'Generation.GIED1.Measurement.Apparent': 'power_apparent'
     }
     

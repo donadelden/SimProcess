@@ -117,8 +117,8 @@ def plot_power_system_data(csv_file, output_folder=None, show_plots=True, dpi=30
     fig4, ax4 = plt.subplots(figsize=(12, 7))
     if 'power_real' in df.columns:
         ax4.plot(df['timestamp'], df['power_real'], label='Real Power (P)', color='blue')
-    if 'power_effective' in df.columns:
-        ax4.plot(df['timestamp'], df['power_effective'], label='Reactive Power (Q)', color='red')
+    if 'power_reactive' in df.columns:
+        ax4.plot(df['timestamp'], df['power_reactive'], label='Reactive Power (Q)', color='red')
     if 'power_apparent' in df.columns:
         ax4.plot(df['timestamp'], df['power_apparent'], label='Apparent Power (S)', color='green')
     
