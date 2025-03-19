@@ -313,18 +313,18 @@ def extract_features(signal, is_noise=False):
             
         try:
             variance = feature_calculators.variance(signal)
-            features['variance_ratio'] = (variance / mean_value) if mean_value != 0 else 0
+            features['variance_mean_ratio'] = (variance / mean_value) if mean_value != 0 else 0
         except Exception as e:
-            logger.debug(f"Failed to calculate variance_ratio: {str(e)}")
-            features['variance_ratio'] = 0.0
+            logger.debug(f"Failed to calculate variance_mean_ratio: {str(e)}")
+            features['variance_mean_ratio'] = 0.0
             
         # Calculate std_perc with error handling
         try:
             std = feature_calculators.standard_deviation(signal)
-            features['std_ratio'] = (std / mean_value) if mean_value != 0 else 0
+            features['std_mean_ratio'] = (std / mean_value) if mean_value != 0 else 0
         except Exception as e:
-            logger.debug(f"Failed to calculate std_ratio: {str(e)}")
-            features['std_ratio'] = 0.0
+            logger.debug(f"Failed to calculate std_mean_ratio: {str(e)}")
+            features['std_mean_ratio'] = 0.0
             
         try:
             features['skewness'] = feature_calculators.skewness(signal)
