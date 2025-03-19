@@ -55,6 +55,11 @@ class PowerPlantSim(mosaik_api.Simulator):
         for noise_config in self.noise_configs:
             if noise_config.get('type') == 'gmm' and noise_config.get('reference_file'):
                 self.init_gmm_models(noise_config)
+                
+        # Variables to track simulation progress for current pattern
+        self.total_duration = None
+        self.current_pattern_breakpoints = None
+        self.current_pattern_multipliers = None
 
     def init_gmm_models(self, noise_config):
         """Initialize GMM models from reference data."""
@@ -108,7 +113,8 @@ class PowerPlantSim(mosaik_api.Simulator):
             print(f"Error initializing GMM models: {e}")
 
     def init(self, sid, time_resolution=1, step_size=1, noise_configs=None, 
-             base_voltage=245.0, base_current=20.0, base_frequency=50.0):
+             base_voltage=245.0, base_current=20.0, base_frequency=50.0,
+             total_duration=None):
         self.time_resolution = time_resolution
         self.step_size = step_size
         if noise_configs:
@@ -122,6 +128,21 @@ class PowerPlantSim(mosaik_api.Simulator):
         self.base_voltage = base_voltage
         self.base_current = base_current
         self.base_frequency = base_frequency
+        
+        # Setup the current pattern based on the simulation duration
+        self.total_duration = total_duration
+        
+        # Define breakpoints for the current pattern (as percentages)
+        breakpoint_percentages = [0.2, 0.45, 0.65, 0.85, 1.0]
+        self.current_pattern_breakpoints = [int(bp * self.total_duration) for bp in breakpoint_percentages]
+        
+        # Define current multipliers for each segment
+        # 1.0 = base value, 1.2 = base+20%, 0.85 = base-15%
+        self.current_pattern_multipliers = [1.0, 1.2, 1.0, 0.85, 1.0]
+        
+        print(f"Current pattern breakpoints (steps): {self.current_pattern_breakpoints}")
+        print(f"Current pattern multipliers: {self.current_pattern_multipliers}")
+        
         return self.meta
 
     def create(self, num, model_params=None):
@@ -257,6 +278,31 @@ class PowerPlantSim(mosaik_api.Simulator):
         
         return current_value
     
+    def get_current_multiplier(self, time):
+        """
+        Get the current multiplier based on the current simulation time.
+        
+        Parameters:
+        -----------
+        time : int
+            Current simulation time
+        
+        Returns:
+        --------
+        float
+            Multiplier to apply to the base current value
+        """
+        if not self.total_duration or not self.current_pattern_breakpoints:
+            return 1.0  # Default multiplier if pattern is not set up
+        
+        # Find which segment of the pattern we're in
+        for i, breakpoint in enumerate(self.current_pattern_breakpoints):
+            if time < breakpoint:
+                return self.current_pattern_multipliers[i]
+        
+        # Default to last segment
+        return self.current_pattern_multipliers[-1]
+    
     def step(self, time, inputs, max_advance):
         self.time = time
         
@@ -267,6 +313,9 @@ class PowerPlantSim(mosaik_api.Simulator):
         voltage_variation = 1.0
         if has_noise:
             voltage_variation = self.add_noise(1.0, 'voltage_variation')
+        
+        # Get current multiplier based on the pattern
+        current_multiplier = self.get_current_multiplier(time)
         
         for eid, attrs in self.entities.items():
             # Apply phase angle variations
@@ -299,16 +348,18 @@ class PowerPlantSim(mosaik_api.Simulator):
             attrs['voltage_bc'] = np.sqrt(v2**2 + v3**2 - 2 * v2 * v3 * np.cos(np.radians(angle_2 - angle_3)))
             attrs['voltage_ca'] = np.sqrt(v3**2 + v1**2 - 2 * v3 * v1 * np.cos(np.radians(angle_3 - angle_1)))
             
+            # Apply the pattern multiplier to the base current and then add noise
+            modified_base_current = self.base_current * current_multiplier
+            
             # Apply current noise to each phase
-            base_current = self.base_current
             if has_noise:
-                attrs['current_a'] = self.add_noise(base_current, 'current_a')
-                attrs['current_b'] = self.add_noise(base_current, 'current_b')
-                attrs['current_c'] = self.add_noise(base_current, 'current_c')
+                attrs['current_a'] = self.add_noise(modified_base_current, 'current_a')
+                attrs['current_b'] = self.add_noise(modified_base_current, 'current_b')
+                attrs['current_c'] = self.add_noise(modified_base_current, 'current_c')
             else:
-                attrs['current_a'] = base_current
-                attrs['current_b'] = base_current
-                attrs['current_c'] = base_current
+                attrs['current_a'] = modified_base_current
+                attrs['current_b'] = modified_base_current
+                attrs['current_c'] = modified_base_current
             
             # Apply power factor noise
             base_pf = 0.95
@@ -413,6 +464,8 @@ def run_simulation(duration, noise_configs=None, raw_output='results.csv',
     
     print(f"Starting simulation with noise types: {', '.join(noise_descriptions)}")
     print(f"Using base voltage={base_voltage}V, current={base_current}A, frequency={base_frequency}Hz")
+    print(f"Current pattern: First 20% at base, next 25% at base+20%, next 20% at base,")
+    print(f"                 next 20% at base-15%, final 15% at base")
 
     world = mosaik.World(SIM_CONFIG)
     power_plant = world.start('PowerPlantSim', 
@@ -420,7 +473,8 @@ def run_simulation(duration, noise_configs=None, raw_output='results.csv',
                              noise_configs=noise_configs,
                              base_voltage=base_voltage,
                              base_current=base_current,
-                             base_frequency=base_frequency)
+                             base_frequency=base_frequency,
+                             total_duration=duration)
     pp_entities = power_plant.PowerPlant.create(1)
     
     csv_writer = world.start(

@@ -25,9 +25,6 @@ generate_datasets() {
     --noise "laplace:scale=0.01" --output-noisy "${name}Panda+laplace.csv" --output-noiseless "${name}Panda_denoised.csv"
 
   python3 main.py $samples --voltage $voltage --current $current --frequency $frequency \
-    --noise "brownian:scale=0.015" --output-noisy "${name}Panda+brownian.csv" --output-noiseless "${name}Panda_denoised.csv"
-
-  python3 main.py $samples --voltage $voltage --current $current --frequency $frequency \
     --noise "pink:scale=0.01" --output-noisy "${name}Panda+pink.csv" --output-noiseless "${name}Panda_denoised.csv"
 
   python3 main.py $samples --voltage $voltage --current $current --frequency $frequency \

@@ -25,9 +25,6 @@ generate_mosaik() {
     --noise "laplace:scale=0.01" --processed-output "${name}Mosaik+laplace.csv"
 
   python3 main.py $samples --voltage $voltage --current $current --frequency $frequency \
-    --noise "brownian:scale=0.015" --processed-output "${name}Mosaik+brownian.csv"
-
-  python3 main.py $samples --voltage $voltage --current $current --frequency $frequency \
     --noise "pink:scale=0.01" --processed-output "${name}Mosaik+pink.csv"
 
   python3 main.py $samples --voltage $voltage --current $current --frequency $frequency \

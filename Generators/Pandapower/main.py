@@ -363,8 +363,43 @@ class NoiseGenerator:
         return any(config['type'] != 'none' for config in self.noise_configs)
 
 
-def simulate_measurements(net, timestamp, noise_generator, freq=50.0, voltage=245.0, current=20.0):
-    """Simulate electrical measurements with configurable noise"""
+# Function to determine the current multiplier based on the simulation progress
+def get_current_multiplier(current_index, total_duration):
+    """
+    Get the current multiplier based on the current index position in the simulation.
+    
+    Parameters:
+    -----------
+    current_index : int
+        Current index in the simulation timeline
+    total_duration : int
+        Total duration of the simulation in steps
+        
+    Returns:
+    --------
+    float
+        Multiplier to apply to the base current value
+    """
+    # Define breakpoints for the current pattern (as percentages)
+    breakpoint_percentages = [0.2, 0.45, 0.65, 0.85, 1.0]
+    breakpoints = [int(bp * total_duration) for bp in breakpoint_percentages]
+    
+    # Define current multipliers for each segment
+    # 1.0 = base value, 1.2 = base+20%, 0.85 = base-15%
+    multipliers = [1.0, 1.2, 1.0, 0.85, 1.0]
+    
+    # Find which segment of the pattern we're in
+    for i, breakpoint in enumerate(breakpoints):
+        if current_index < breakpoint:
+            return multipliers[i]
+    
+    # Default to last segment
+    return multipliers[-1]
+
+
+def simulate_measurements(net, timestamp, noise_generator, freq=50.0, voltage=245.0, current=20.0, 
+                         current_index=0, total_duration=None):
+    """Simulate electrical measurements with configurable noise and current pattern"""
     try:
         pp.runpp(net, calculate_voltage_angles=True)
         
@@ -374,6 +409,11 @@ def simulate_measurements(net, timestamp, noise_generator, freq=50.0, voltage=24
         
         bus = 0
         t = timestamp.timestamp()
+        
+        # Apply the current pattern if total_duration is provided
+        current_multiplier = 1.0
+        if total_duration is not None:
+            current_multiplier = get_current_multiplier(current_index, total_duration)
         
         # Get base voltage variation (applies to all phases)
         voltage_variation = 1.0
@@ -406,16 +446,18 @@ def simulate_measurements(net, timestamp, noise_generator, freq=50.0, voltage=24
         v_bc = np.sqrt(v2**2 + v3**2 - 2 * v2 * v3 * np.cos(np.radians(angle_2 - angle_3)))
         v_ca = np.sqrt(v3**2 + v1**2 - 2 * v3 * v1 * np.cos(np.radians(angle_3 - angle_1)))
         
+        # Apply the pattern multiplier to the base current before applying noise
+        modified_base_current = current * current_multiplier
+        
         # Apply current noise to each phase
-        base_current = current
         if has_noise:
-            i1 = noise_generator.add_noise(base_current, 'current_a')
-            i2 = noise_generator.add_noise(base_current, 'current_b')
-            i3 = noise_generator.add_noise(base_current, 'current_c')
+            i1 = noise_generator.add_noise(modified_base_current, 'current_a')
+            i2 = noise_generator.add_noise(modified_base_current, 'current_b')
+            i3 = noise_generator.add_noise(modified_base_current, 'current_c')
         else:
-            i1 = base_current
-            i2 = base_current
-            i3 = base_current
+            i1 = modified_base_current
+            i2 = modified_base_current
+            i3 = modified_base_current
             
         # Apply power factor noise
         base_pf = 0.95
@@ -518,6 +560,14 @@ def main():
         print(f"Generating {args.duration} seconds of data starting from {start_time}")
         print(f"Using voltage={args.voltage}V, current={args.current}A, frequency={args.frequency}Hz")
         
+        # Display current pattern information
+        print("Current pattern:")
+        print("- First 20% of samples: base current")
+        print("- Next 25% of samples: base current +20%")
+        print("- Next 20% of samples: back to base current")
+        print("- Next 20% of samples: base current -15%")
+        print("- Final 15% of samples: back to base current")
+        
         # Display noise configurations
         print("Noise configurations:")
         for i, config in enumerate(noise_configs):
@@ -530,14 +580,16 @@ def main():
         # Noiseless data
         print("Generating noiseless data...")
         noiseless_measurements = []
-        for timestamp in timestamps:
+        for i, timestamp in enumerate(timestamps):
             measurements = simulate_measurements(
                 net, 
                 timestamp, 
                 noise_generator=no_noise_generator,
                 voltage=args.voltage,
                 current=args.current,
-                freq=args.frequency
+                freq=args.frequency,
+                current_index=i,
+                total_duration=args.duration
             )
             noiseless_measurements.append(measurements)
         
@@ -547,14 +599,16 @@ def main():
         # Noisy data
         print("Generating noisy data...")
         noisy_measurements = []
-        for timestamp in timestamps:
+        for i, timestamp in enumerate(timestamps):
             measurements = simulate_measurements(
                 net, 
                 timestamp, 
                 noise_generator=noise_generator,
                 voltage=args.voltage,
                 current=args.current,
-                freq=args.frequency
+                freq=args.frequency,
+                current_index=i,
+                total_duration=args.duration
             )
             noisy_measurements.append(measurements)
         
