@@ -77,7 +77,7 @@ def setup_parser(parser):
     # Add new parameter for epsilon
     parser.add_argument('--epsilon',
                        type=float,
-                       default=0.08,
+                       default=0.10,
                        help='Epsilon value for filtering outliers (default: 0.08)')
 
     # Add parameter to force all columns extraction

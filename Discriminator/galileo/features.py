@@ -7,11 +7,13 @@ import pandas as pd
 import numpy as np
 import logging
 from tsfresh.feature_extraction import feature_calculators
+
 from galileo.core import (
     SIGNAL_TYPES, 
     CRITICAL_FEATURES, 
     FeatureExtractionError,
-    validate_directory
+    validate_directory,
+    is_numeric_column
 )
 from galileo.data import load_data, filter_data, extract_noise_signal
 
@@ -412,18 +414,87 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
     all_features = []
     feature_names = [] 
     
-    # Filter data using the specified epsilon value
-    logger.info(f"Filtering data with epsilon={epsilon}")
-    filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon, target_column=target_column)
+    # Count processed and filtered windows for debugging
+    total_windows = 0
+    filtered_windows = 0
     
-    for i in range(0, len(filtered_df), window_size//2):  # 50% overlap
+    filtered_df = df.copy()  # We will not prefilter the entire dataframe, but filter each window locally
+    
+    for i in range(0, len(filtered_df), window_size//5):  # 80% overlap
         window = filtered_df.iloc[i:i+window_size].copy()
         
         # Skip if window is too small
         if len(window) < window_size:
             continue
+            
+        total_windows += 1
         
-        # Skip windows with insufficient variance in the target column
+        # LOCAL WINDOW FILTERING LOGIC
+        window_is_valid = True  # Start as valid, will be set to invalid if any value is outside the range
+        
+        # Columns to filter (excluding noise columns)
+        columns_to_filter = []
+        
+        if target_column:
+            # If target column specified, only filter that column
+            columns_to_filter = [target_column]
+        else:
+            # Otherwise find all signal columns (excluding noise)
+            from galileo.core import SIGNAL_TYPES
+            
+            for category, cols in SIGNAL_TYPES.items():
+                for col in cols:
+                    if col in window.columns and '_noise_raw' not in col:
+                        columns_to_filter.append(col)
+            
+            # If no columns found, use all numeric columns that aren't noise
+            if not columns_to_filter:
+                columns_to_filter = [col for col in window.columns 
+                                     if '_noise_raw' not in col and col not in ['timestamp', 'date']
+                                     and is_numeric_column(window, col)]
+        
+        # Apply filtering logic to each column
+        for col in columns_to_filter:
+            # Skip columns with all NaN values
+            if window[col].isna().all():
+                continue
+                
+            # Get the signal values, skipping NaN values
+            non_nan_signal = window[col].dropna().values
+            
+            if len(non_nan_signal) == 0:
+                continue
+                
+            # Calculate mean for this column in this window
+            mean_value = np.mean(non_nan_signal)
+            
+            # Calculate bounds based on epsilon, handling negative values correctly
+            if mean_value >= 0:
+                lower_bound = mean_value * (1 - epsilon)
+                upper_bound = mean_value * (1 + epsilon)
+            else:
+                # For negative means, multiplying by (1+epsilon) makes it more negative
+                lower_bound = mean_value * (1 + epsilon)
+                upper_bound = mean_value * (1 - epsilon)
+            
+            # Check each value - if ANY value is OUTSIDE the range, mark window as invalid
+            for val in non_nan_signal:
+                if val < lower_bound or val > upper_bound:
+                    window_is_valid = False
+                    break
+            
+            # If this column made the window invalid, no need to check other columns
+            if not window_is_valid:
+                break
+        
+        # Skip this window if it's not valid
+        if not window_is_valid:
+            filtered_windows += 1
+            continue
+            
+        # From here on proceed with feature extraction for valid windows
+        
+        # Check if target_column has enough non-NaN values
         if target_column and target_column in window.columns:
             # Skip if there's not enough data
             if window[target_column].isna().sum() > window_size * 0.4:  # More than 40% NaN
@@ -434,19 +505,6 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
             
             # Skip if no valid data
             if len(signal) == 0:
-                continue
-                
-            # Skip if standard deviation is extremely low (nearly constant signal)
-            if np.std(signal) < 1e-5:
-                continue
-                
-            # Skip if range is too small (signal barely changes)
-            if np.ptp(signal) < 1e-4:  # ptp = peak to peak
-                continue
-                
-            # Skip if most values are repeated (low information content)
-            unique_ratio = len(np.unique(signal)) / len(signal)
-            if unique_ratio < 0.1:  # Less than 10% of values are unique
                 continue
                 
             # Skip if signal is mostly zeros
@@ -534,8 +592,10 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
     
     if not all_features:
         logger.warning("No features extracted")
+        logger.info(f"Total windows processed: {total_windows}, Windows filtered: {filtered_windows}")
         return pd.DataFrame(), feature_names
-        
+    
+    logger.info(f"Extracted {len(all_features)} windows (from {total_windows} total, {filtered_windows} filtered)")
     return pd.DataFrame(all_features), feature_names
 
 def clean_features_dataframe(combined_df):
@@ -715,76 +775,15 @@ def process_csv_files(data_directory, output_file=None, target_column=None, wind
             # that contain data from all target columns
             if all_columns:
                 logger.info(f"Extracting features from all columns in parallel with epsilon={epsilon}")
+                                
+                # Extract features directly from each window with local filtering
+                features_df, _ = extract_window_features(
+                    df, 
+                    window_size=window_size, 
+                    epsilon=epsilon
+                )
                 
-                # Filter data using the specified epsilon value
-                filtered_df = filter_data(df, window_size=window_size, epsilon=epsilon)
-                
-                # Process windows with 50% overlap
-                window_features_list = []
-                for i in range(0, len(filtered_df), window_size//2):
-                    window = filtered_df.iloc[i:i+window_size].copy()
-                    
-                    # Skip if window is too small
-                    if len(window) < window_size:
-                        continue
-                    
-                    window_features = {}
-                    valid_window = True
-                    
-                    # Check if we have sufficient valid data for all target columns
-                    for col in target_columns:
-                        if col not in window.columns or window[col].isna().all():
-                            valid_window = False
-                            break
-                        
-                        # Check if data has enough variation to be meaningful
-                        signal = window[col].dropna().values
-                        if len(signal) < window_size * 0.6:  # Require at least 60% valid data
-                            valid_window = False
-                            break
-                        
-                        # Skip if standard deviation is extremely low (nearly constant signal)
-                        if np.std(signal) < 1e-5:
-                            valid_window = False
-                            break
-                            
-                        # Skip if range is too small (signal barely changes)
-                        if np.ptp(signal) < 1e-4:  # ptp = peak to peak
-                            valid_window = False
-                            break
-                    
-                    if not valid_window:
-                        continue
-                    
-                    # Extract features for each target column
-                    for col in target_columns:
-                        signal = window[col].values
-                        
-                        # Extract regular features
-                        features = extract_features(signal, is_noise=False)
-                        if features:
-                            for fname, fval in features.items():
-                                feature_name = f"{col}_{fname}"
-                                window_features[feature_name] = fval
-                        
-                        # Extract noise features if available
-                        if col in noise_columns:
-                            noise_col = noise_columns[col]
-                            if noise_col in window.columns:
-                                noise_signal = window[noise_col].values
-                                noise_features = extract_features(noise_signal, is_noise=True)
-                                if noise_features:
-                                    for fname, fval in noise_features.items():
-                                        feature_name = f"noise_{col}_{fname}"
-                                        window_features[feature_name] = fval
-                    
-                    if window_features:
-                        window_features_list.append(window_features)
-                
-                if window_features_list:
-                    # Create a DataFrame with all features
-                    features_df = pd.DataFrame(window_features_list)
-                    
+                if not features_df.empty:
                     # Add metadata
                     is_real = 1 if ("EPIC" in file_name or "MORRIS" in file_name) else 0
                     features_df['real'] = is_real
@@ -792,6 +791,7 @@ def process_csv_files(data_directory, output_file=None, target_column=None, wind
                     
                     all_features.append(features_df)
                     logger.info(f"Extracted {len(features_df)} windows with {len(features_df.columns) - 2} features")
+                
             else:
                 # Process a single target column
                 logger.info(f"Extracting features from column '{target_column}' with epsilon={epsilon}")
