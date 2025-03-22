@@ -10,3 +10,4 @@
 *.joblib
 *.pth
 /GALILEO/galileo.egg-info
+venv
