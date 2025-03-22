@@ -86,7 +86,7 @@ def create_sequences(data, n):
         y.append(data[i+n])    # Predict the nth sample
     return np.array(X), np.array(y)
 
-def load_data(file_paths, window_size):
+def load_data(file_paths, window_size, measurements_to_keep):
     X, y = None, None
     for file_path in file_paths:
         df = pd.read_csv(file_path)
@@ -146,7 +146,7 @@ if __name__ == '__main__':
 
     #init model + optimizer + datasets
 
-    X, _ = load_data(file_paths, window_size)
+    X, _ = load_data(file_paths, window_size, measurements_to_keep)
 
     # Split the data into train and test sets
     X_train, X_test = train_test_split(X, test_size=0.1, random_state=seed)
