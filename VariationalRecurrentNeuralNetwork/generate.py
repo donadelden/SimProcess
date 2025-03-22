@@ -47,4 +47,4 @@ if __name__ == "__main__":
         samples_np = samples.cpu().detach().numpy()
         samples_np = samples_np[1:]
         samples_df = pd.DataFrame(samples_np, columns=measurements_to_keep)
-        samples_df.to_csv(f'saves/autoencoder_data/{filename[:-4]}_autoencoderEPICnoise.csv', index=False)
+        samples_df.to_csv(f'saves/output/{filename[:-4]}_autoencoderEPICnoise.csv', index=False)
