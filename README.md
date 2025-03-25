@@ -1,4 +1,4 @@
-# Power Grid Data Analysis and Discrimination
+# SimProcess: High Fidelity Simulation of Noisy ICS Physical Processes
 
 This project provides tools for generating synthetic power grid data, processing real power grid measurements, and discriminating between real and simulated scenarios using machine learning.
 
