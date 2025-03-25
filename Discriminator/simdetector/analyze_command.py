@@ -1,11 +1,11 @@
 """
-Analyze command implementation for Galileo CLI.
+Analyze command implementation for SimDetector CLI.
 """
 
 import logging
 import os
-from galileo.model import analyze_with_model
-from galileo.core import (
+from simdetector.model import analyze_with_model
+from simdetector.core import (
     DEFAULT_MODEL_PATH, 
     DEFAULT_WINDOW_SIZE,
     DEFAULT_FILTER_TYPE,
@@ -15,7 +15,7 @@ from galileo.core import (
     ModelError
 )
 
-logger = logging.getLogger('galileo.cli.analyze')
+logger = logging.getLogger('simdetector.cli.analyze')
 
 def setup_parser(parser):
     """

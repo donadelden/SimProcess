@@ -9,5 +9,4 @@
 /Discriminator/results
 *.joblib
 *.pth
-/GALILEO/galileo.egg-info
 venv

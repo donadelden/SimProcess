@@ -1,5 +1,5 @@
 """
-Galileo - Signal Analysis and Classification Framework
+SimDetector - Signal Analysis and Classification Framework
 
 A tool for analyzing time series data, extracting features, 
 and classifying signals as real or simulated.

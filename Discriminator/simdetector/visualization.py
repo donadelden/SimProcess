@@ -1,5 +1,5 @@
 """
-Visualization functions for the Galileo framework.
+Visualization functions for the SimDetector framework.
 """
 
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ import pandas as pd
 import logging
 import os
 
-logger = logging.getLogger('galileo.visualization')
+logger = logging.getLogger('simdetector.visualization')
 
 def plot_feature_importance(importance_df, title="Feature Importance", metric_name=None, output_dir=None):
     """

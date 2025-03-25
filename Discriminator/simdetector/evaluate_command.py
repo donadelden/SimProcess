@@ -1,5 +1,5 @@
 """
-Evaluate command implementation for Galileo CLI.
+Evaluate command implementation for SimDetector CLI.
 """
 
 import logging
@@ -7,19 +7,19 @@ import os
 import joblib
 import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix
-from galileo.model import split_features_dataset, evaluate_model
-from galileo.visualization import (
+from simdetector.model import split_features_dataset, evaluate_model
+from simdetector.visualization import (
     plot_confusion_matrix,
     plot_prediction_distribution,
     generate_report_summary
 )
-from galileo.core import (
+from simdetector.core import (
     DEFAULT_MODEL_PATH,
     DEFAULT_REPORT_PATH,
     DEFAULT_TRAIN_RATIO
 )
 
-logger = logging.getLogger('galileo.cli.evaluate')
+logger = logging.getLogger('simdetector.cli.evaluate')
 
 def setup_parser(parser):
     """

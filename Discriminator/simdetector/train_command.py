@@ -1,16 +1,16 @@
 """
-Train command implementation for Galileo CLI.
+Train command implementation for SimDetector CLI.
 """
 
 import logging
 import os
-from galileo.core import (
+from simdetector.core import (
     DEFAULT_MODEL_PATH,
     DEFAULT_REPORT_PATH
 )
-from galileo.ml import train_binary, train_reducing_features
+from simdetector.ml import train_binary, train_reducing_features
 
-logger = logging.getLogger('galileo.cli.train')
+logger = logging.getLogger('simdetector.cli.train')
 
 def setup_parser(parser):
     """

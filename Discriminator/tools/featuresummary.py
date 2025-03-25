@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Dataset Summary Generator for Galileo Framework
+Dataset Summary Generator for SimDetector Framework
 
 This script explores all window directories and their subfolders, analyzing feature CSV files
 to generate a comprehensive summary of the dataset statistics, including counts of real and
@@ -17,7 +17,7 @@ from pathlib import Path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('galileo.dataset_summary')
+logger = logging.getLogger('simdetector.dataset_summary')
 
 def extract_feature_type(filename):
     """Extract the type of feature from a CSV filename"""
@@ -195,7 +195,7 @@ def save_summary(dataset_stats, output_file):
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(
-        description="Dataset Summary Generator for Galileo Framework",
+        description="Dataset Summary Generator for SimDetector Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     

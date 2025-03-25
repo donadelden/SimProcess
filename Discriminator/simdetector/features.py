@@ -1,5 +1,5 @@
 """
-Feature extraction and processing functions for the Galileo framework.
+Feature extraction and processing functions for the SimDetector framework.
 """
 
 import os
@@ -8,16 +8,16 @@ import numpy as np
 import logging
 from tsfresh.feature_extraction import feature_calculators
 
-from galileo.core import (
+from simdetector.core import (
     SIGNAL_TYPES, 
     CRITICAL_FEATURES, 
     FeatureExtractionError,
     validate_directory,
     is_numeric_column
 )
-from galileo.data import load_data, filter_data, extract_noise_signal
+from simdetector.data import load_data, filter_data, extract_noise_signal
 
-logger = logging.getLogger('galileo.features')
+logger = logging.getLogger('simdetector.features')
 
 def extract_features(signal, is_noise=False):
     """
@@ -440,7 +440,7 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
             columns_to_filter = [target_column]
         else:
             # Otherwise find all signal columns (excluding noise)
-            from galileo.core import SIGNAL_TYPES
+            from simdetector.core import SIGNAL_TYPES
             
             for category, cols in SIGNAL_TYPES.items():
                 for col in cols:
@@ -519,7 +519,7 @@ def extract_window_features(df, window_size=10, target_column=None, noise_column
                 window = window.dropna(subset=[noise_column])
         else:
             # Import SIGNAL_TYPES from core module
-            from galileo.core import SIGNAL_TYPES
+            from simdetector.core import SIGNAL_TYPES
             
             columns_to_check = []
             for category, cols in SIGNAL_TYPES.items():
@@ -685,7 +685,7 @@ def process_csv_files(data_directory, output_file=None, target_column=None, wind
         validate_directory(data_directory)
         
         # Import required functions from core
-        from galileo.core import is_numeric_column, SIGNAL_TYPES
+        from simdetector.core import is_numeric_column, SIGNAL_TYPES
         
         # Generate default output filename if not provided
         if output_file is None:

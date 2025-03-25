@@ -1,10 +1,10 @@
 """
-Extract command implementation for Galileo CLI.
+Extract command implementation for SimDetector CLI.
 """
 
 import logging
-from galileo.features import process_csv_files
-from galileo.core import (
+from simdetector.features import process_csv_files
+from simdetector.core import (
     DEFAULT_WINDOW_SIZE,
     DEFAULT_FILTER_TYPE,
     DEFAULT_CUTOFF,
@@ -12,7 +12,7 @@ from galileo.core import (
     DEFAULT_POLY_ORDER
 )
 
-logger = logging.getLogger('galileo.cli.extract')
+logger = logging.getLogger('simdetector.cli.extract')
 
 def setup_parser(parser):
     """

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Galileo - Signal Analysis and Classification Framework
+SimDetector - Signal Analysis and Classification Framework
 
 A tool for analyzing time series data, extracting features, 
 and classifying signals as real or simulated.
@@ -8,7 +8,7 @@ and classifying signals as real or simulated.
 
 import sys
 import argparse
-from galileo.cli import (
+from simdetector.cli import (
     extract_command, 
     train_command, 
     evaluate_command,
@@ -19,12 +19,12 @@ from galileo.cli import (
 def create_parser():
     """Create the main argument parser with subcommands."""
     parser = argparse.ArgumentParser(
-        description="Galileo - Signal Analysis and Classification Framework",
+        description="SimDetector - Signal Analysis and Classification Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
     # Version information
-    parser.add_argument('--version', action='version', version='Galileo v1.0.0')
+    parser.add_argument('--version', action='version', version='SimDetector v1.0.0')
     
     # Create subparsers for different commands
     subparsers = parser.add_subparsers(dest='command', help='Command to execute')

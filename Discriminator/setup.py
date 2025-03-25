@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="galileo",
+    name="simdetector",
     version="1.0.0",
     description="Signal Analysis and Classification Framework",
     author="PLACEHOLDER",
@@ -19,7 +19,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "galileo=main:main",
+            "simdetector=main:main",
         ],
     },
     classifiers=[

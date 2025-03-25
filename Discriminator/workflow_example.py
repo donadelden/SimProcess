@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Galileo Extract and Train Workflow
+SimDetector Extract and Train Workflow
 
 This script:
 1. Extracts features from all CSV files in the dataset/ directory
@@ -19,13 +19,13 @@ import logging
 import argparse
 import sys
 import glob
-from galileo.features import process_csv_files
-from galileo.core import SIGNAL_TYPES
-from galileo.model import train_with_features
+from simdetector.features import process_csv_files
+from simdetector.core import SIGNAL_TYPES
+from simdetector.model import train_with_features
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('galileo_workflow')
+logger = logging.getLogger('simdetector_workflow')
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Extract features and train models from dataset')
@@ -161,7 +161,7 @@ def train_models(feature_files):
 
 def main():
     """Run the complete workflow."""
-    logger.info("Starting Galileo Extract and Train Workflow")
+    logger.info("Starting SimDetector Extract and Train Workflow")
     
     # Create necessary directories
     ensure_dirs_exist()

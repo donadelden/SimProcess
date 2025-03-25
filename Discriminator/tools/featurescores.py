@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Feature Importance Extractor for Galileo Framework
+Feature Importance Extractor for SimDetector Framework
 
 This script explores the dataset folder structure and generates feature importance
 CSV files for each combined_*_features.csv file in the dataset.
@@ -19,7 +19,7 @@ from pathlib import Path
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('galileo.feature_importance')
+logger = logging.getLogger('simdetector.feature_importance')
 
 def extract_csv_type(filename):
     """Extract the type of CSV file from its filename"""
@@ -195,7 +195,7 @@ def traverse_dataset_directory(root_dir):
 def main():
     # Set up argument parser
     parser = argparse.ArgumentParser(
-        description="Feature Importance Extractor for Galileo Framework",
+        description="Feature Importance Extractor for SimDetector Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
