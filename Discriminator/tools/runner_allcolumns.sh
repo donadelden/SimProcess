@@ -16,6 +16,10 @@ EPSILON=0.3
 FILTERS=("kalman")
 OUTPUT_DIR="dataset_features"
 
+# Create main output directory if it doesn't exist
+mkdir -p "$OUTPUT_DIR"
+echo "Ensuring output directory exists: $OUTPUT_DIR"
+
 # Create a wrapper script for running the extraction with filters
 cat > run_extraction_filter.sh << 'EOF'
 #!/bin/bash

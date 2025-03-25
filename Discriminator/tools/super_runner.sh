@@ -10,13 +10,23 @@ if ! command -v parallel &>/dev/null; then
     exit 1
 fi
 
+# Define parameters
+COLUMNS=("C1" "C2" "C3" "V1" "V2" "V3" "frequency" "power_real" "power_reactive" "power_apparent")
+WINDOWS=(5 10 15 20 30 40 50 60 70 80 90 100)
+FILTERS=("kalman")
+OUTPUT_DIR="dataset_features"
+
+# Create main output directory if it doesn't exist
+mkdir -p "$OUTPUT_DIR"
+echo "Ensuring main output directory exists: $OUTPUT_DIR"
+
 # Create a wrapper script for running the extraction with filters
 cat > run_extraction_filter.sh << 'EOF'
 #!/bin/bash
 COLUMN="$1"
 WINDOW="$2"
 FILTER="$3"
-OUTPUT_DIR="dataset_features/window$WINDOW/$FILTER"
+OUTPUT_DIR="$4/window$WINDOW/$FILTER"
 
 # Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
@@ -31,7 +41,7 @@ cat > run_extraction_no_noise.sh << 'EOF'
 #!/bin/bash
 COLUMN="$1"
 WINDOW="$2"
-OUTPUT_DIR="dataset_features/window$WINDOW/no_noise"
+OUTPUT_DIR="$3/window$WINDOW/no_noise"
 
 # Create output directory if it doesn't exist
 mkdir -p "$OUTPUT_DIR"
@@ -45,22 +55,13 @@ EOF
 chmod +x run_extraction_filter.sh
 chmod +x run_extraction_no_noise.sh
 
-# Define an array of columns to process
-COLUMNS=("C1" "C2" "C3" "V1" "V2" "V3" "frequency" "power_real" "power_reactive" "power_apparent")
-
-# Define window sizes
-WINDOWS=(5 10 15 20 30 40 50 60 70 80 90 100)
-
-# Define the filters to use
-FILTERS=("kalman")
-
 echo "Starting parallel feature extraction with multiple filters..."
 echo "=========================================="
 
 # Run the extractions with filters in parallel
 for FILTER in "${FILTERS[@]}"; do
     echo "Processing filter: $FILTER"
-    parallel --progress --bar "./run_extraction_filter.sh {1} {2} $FILTER" ::: "${COLUMNS[@]}" ::: "${WINDOWS[@]}"
+    parallel --progress --bar "./run_extraction_filter.sh {1} {2} $FILTER $OUTPUT_DIR" ::: "${COLUMNS[@]}" ::: "${WINDOWS[@]}"
     
     if [ $? -ne 0 ]; then
         echo "Some $FILTER filter extraction jobs failed. Check the output above for details."
@@ -74,7 +75,7 @@ echo "Starting parallel feature extraction with no noise..."
 echo "=========================================="
 
 # Run the extractions with no noise in parallel
-#parallel --progress --bar "./run_extraction_no_noise.sh {1} {2}" ::: "${COLUMNS[@]}" ::: "${WINDOWS[@]}"
+#parallel --progress --bar "./run_extraction_no_noise.sh {1} {2} $OUTPUT_DIR" ::: "${COLUMNS[@]}" ::: "${WINDOWS[@]}"
 
 if [ $? -ne 0 ]; then
     echo "Some no-noise extraction jobs failed. Check the output above for details."
