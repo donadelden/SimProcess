@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-SimDetector Extract and Train Workflow
+simdetector Extract and Train Workflow
 
 This script:
 1. Extracts features from all CSV files in the dataset/ directory
    - Processes each column individually
    - Also processes all columns together
    - Uses Kalman filter for noise extraction
-2. Trains a model on each feature file
+2. Trains a model on each feature file using train_command's setup
 3. Saves the results in organized directories
 
 Usage:
@@ -21,7 +21,8 @@ import sys
 import glob
 from simdetector.features import process_csv_files
 from simdetector.core import SIGNAL_TYPES
-from simdetector.model import train_with_features
+from simdetector.train_command import run as train_run
+from argparse import Namespace
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -122,7 +123,7 @@ def extract_features():
     return feature_files
 
 def train_models(feature_files):
-    """Train a model on each feature file."""
+    """Train a model on each feature file using train_command's setup."""
     trained_models = []
     
     for feature_file in feature_files:
@@ -141,15 +142,24 @@ def train_models(feature_files):
         logger.info(f"Training model for {model_name}")
         
         try:
-            success = train_with_features(
-                features_file=feature_file,
-                model_path=model_file,
-                report_file=report_file,
-                train_ratio=0.8,
-                random_seed=42
+            # Create an argparse.Namespace object with the arguments for train_command.run
+            train_args = Namespace(
+                input=feature_file,
+                model=model_file,
+                report=report_file,
+                training_mode='advanced',
+                fast_mode=1,
+                balancing_ratio=0.9,
+                features_to_keep=11,
+                max_features=20,
+                fluctuation=False,
+                no_eval=False
             )
             
-            if success:
+            # Run the train command
+            exit_code = train_run(train_args)
+            
+            if exit_code == 0:
                 logger.info(f"Successfully trained model for {model_name} saved to {model_file}")
                 trained_models.append(model_file)
             else:
@@ -161,7 +171,7 @@ def train_models(feature_files):
 
 def main():
     """Run the complete workflow."""
-    logger.info("Starting SimDetector Extract and Train Workflow")
+    logger.info("Starting simdetector Extract and Train Workflow")
     
     # Create necessary directories
     ensure_dirs_exist()
