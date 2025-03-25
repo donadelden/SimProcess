@@ -368,7 +368,7 @@ def train_binary(base_path, features_to_keep=None, dataset_balancing_ratio=1, wi
 def train_reducing_features(base_path, max_features=10, balRatio=1, windows=[20,50]):
     """Train models with a reduced number of features"""
 
-    for noise in ["kalman"]:
+    for noise in filters:
         results = []
         for window_size in windows:
             # get folder path
