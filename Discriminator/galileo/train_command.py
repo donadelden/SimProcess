@@ -4,13 +4,11 @@ Train command implementation for Galileo CLI.
 
 import logging
 import os
-from galileo.model import train_with_features
 from galileo.core import (
     DEFAULT_MODEL_PATH,
-    DEFAULT_TRAIN_RATIO,
-    DEFAULT_RANDOM_SEED,
     DEFAULT_REPORT_PATH
 )
+from galileo.ml import train_binary, train_reducing_features
 
 logger = logging.getLogger('galileo.cli.train')
 
@@ -29,82 +27,45 @@ def setup_parser(parser):
                       default=DEFAULT_MODEL_PATH,
                       help=f'Path to save the trained model (default: {DEFAULT_MODEL_PATH})')
     
-    parser.add_argument('--train-ratio', '-t',
-                      type=float,
-                      default=DEFAULT_TRAIN_RATIO,
-                      help=f'Ratio of data to use for training (default: {DEFAULT_TRAIN_RATIO})')
-    
-    parser.add_argument('--seed', '-s',
-                      type=int,
-                      default=DEFAULT_RANDOM_SEED,
-                      help=f'Random seed for reproducibility (default: {DEFAULT_RANDOM_SEED})')
-    
-    parser.add_argument('--no-eval',
-                      action='store_true',
-                      help='Skip model evaluation')
-    
-    parser.add_argument('--noise-only',
-                      action='store_true',
-                      help='Use only noise features for training')
-
     parser.add_argument('--report', '-r',
                       default=DEFAULT_REPORT_PATH,
                       help=f'Path to save evaluation report (default: {DEFAULT_REPORT_PATH})')
     
-    # Model type selection
-    parser.add_argument('--model-type',
-                      choices=['svm', 'rf', 'ocsvm'],
-                      default='svm',
-                      help='Type of model to train (default: svm)')
+    # Training mode
+    parser.add_argument('--training-mode',
+                      choices=['advanced', 'feature-reduction'],
+                      default='advanced',
+                      help='Type of training approach to use (default: advanced)')
     
-    # SVM specific parameters
-    parser.add_argument('--kernel',
-                      choices=['rbf', 'linear', 'poly', 'sigmoid'],
-                      default='rbf',
-                      help='Kernel type for SVM and One-Class SVM (default: rbf)')
-    
-    parser.add_argument('--C',
-                      type=float,
-                      default=1.0,
-                      help='Regularization parameter for SVM (default: 1.0)')
-    
-    # One-Class SVM specific parameters
-    parser.add_argument('--nu',
-                      type=float,
-                      default=0.1,
-                      help='Nu parameter for One-Class SVM, controlling the upper bound on training errors and lower bound on support vectors (default: 0.1)')
-    
-    parser.add_argument('--gamma',
-                      type=str,
-                      default='scale',
-                      help='Kernel coefficient for rbf, poly and sigmoid kernels in One-Class SVM (default: scale)')
-    
-    parser.add_argument('--target-class',
+    # Advanced ML options
+    parser.add_argument('--fast-mode',
                       type=int,
-                      choices=[0, 1],
+                      choices=[0, 1, 2],
                       default=1,
-                      help='Target class to model with One-Class SVM (1=real, 0=simulated) (default: 1)')
+                      help='Training speed mode: 0=full, 1=reduced, 2=minimal (default: 1)')
     
-    # Random Forest specific parameters
-    parser.add_argument('--n-estimators',
-                      type=int,
-                      default=100,
-                      help='Number of trees in Random Forest (default: 100)')
+    parser.add_argument('--balancing-ratio',
+                      type=float,
+                      default=0.9,
+                      help='Class balancing ratio for SMOTE (default: 0.9)')
     
-    parser.add_argument('--max-depth',
+    parser.add_argument('--features-to-keep',
                       type=int,
-                      default=None,
-                      help='Maximum depth of trees in Random Forest (default: None)')
+                      default=11,
+                      help='Number of top features to keep (default: 11)')
     
-    parser.add_argument('--min-samples-split',
+    parser.add_argument('--max-features',
                       type=int,
-                      default=2,
-                      help='Minimum samples required to split a node in Random Forest (default: 2)')
+                      default=20,
+                      help='Maximum number of features to use in feature reduction mode (default: 20)')
     
-    parser.add_argument('--min-samples-leaf',
-                      type=int,
-                      default=1,
-                      help='Minimum samples required at a leaf node in Random Forest (default: 1)')
+    parser.add_argument('--fluctuation',
+                      action='store_true',
+                      help='Test on fluctuating data')
+    
+    parser.add_argument('--no-eval',
+                      action='store_true',
+                      help='Skip saving evaluation report')
     
     return parser
 
@@ -119,7 +80,7 @@ def run(args):
     Returns:
         int: Exit code
     """
-    logger.info(f"Training {args.model_type.upper()} model with features file: {args.input}")
+    logger.info(f"Training with mode: {args.training_mode}")
     
     # Ensure input is a CSV file
     if not args.input.lower().endswith('.csv'):
@@ -127,62 +88,41 @@ def run(args):
         return 1
     
     try:
-        # Prepare model-specific parameters
-        model_params = {}
+        # Set up report file path
+        report_file = args.report if not args.no_eval else None
         
-        if args.model_type == 'svm':
-            model_params = {
-                'kernel': args.kernel,
-                'C': args.C,
-                'probability': True
-            }
-            logger.info(f"SVM parameters: kernel={args.kernel}, C={args.C}")
-        elif args.model_type == 'ocsvm':
-            model_params = {
-                'kernel': args.kernel,
-                'nu': args.nu,
-                'gamma': args.gamma,
-                'target_class': args.target_class
-            }
-            logger.info(f"One-Class SVM parameters: kernel={args.kernel}, nu={args.nu}, "
-                        f"gamma={args.gamma}, target_class={args.target_class}")
-        elif args.model_type == 'rf':
-            model_params = {
-                'n_estimators': args.n_estimators,
-                'random_state': args.seed,
-                'n_jobs': -1  # Use all available cores
-            }
+        if args.training_mode == 'feature-reduction':
+            # Use feature reduction training method from ml.py
+            logger.info(f"Using feature reduction training method with max_features={args.max_features}, balancing_ratio={args.balancing_ratio}")
             
-            # Add optional parameters if specified
-            if args.max_depth is not None:
-                model_params['max_depth'] = args.max_depth
-            if args.min_samples_split != 2:
-                model_params['min_samples_split'] = args.min_samples_split
-            if args.min_samples_leaf != 1:
-                model_params['min_samples_leaf'] = args.min_samples_leaf
-                
-            logger.info(f"Random Forest parameters: n_estimators={args.n_estimators}, "
-                        f"max_depth={args.max_depth if args.max_depth else 'None'}, "
-                        f"min_samples_split={args.min_samples_split}, "
-                        f"min_samples_leaf={args.min_samples_leaf}")
-        
-        success = train_with_features(
-            features_file=args.input,
-            model_path=args.model,
-            train_ratio=args.train_ratio,
-            random_seed=args.seed,
-            skip_evaluation=args.no_eval,
-            report_file=args.report,
-            noise_only=args.noise_only,
-            model_type=args.model_type,
-            **model_params
-        )
+            success = train_reducing_features(
+                features_file=args.input,
+                model_path=args.model,
+                report_file=report_file,
+                max_features=args.max_features,
+                balRatio=args.balancing_ratio,
+                fast_mode=args.fast_mode
+            )
+            
+        else:  # args.training_mode == 'advanced'
+            # Use advanced ML training method from ml.py
+            logger.info(f"Using advanced ML training method with fast_mode={args.fast_mode}, balancing_ratio={args.balancing_ratio}")
+            
+            success = train_binary(
+                features_file=args.input,
+                model_path=args.model,
+                report_file=report_file,
+                features_to_keep=args.features_to_keep,
+                dataset_balancing_ratio=args.balancing_ratio,
+                fast_mode=args.fast_mode,
+                fluctuation=args.fluctuation
+            )
         
         if success:
-            logger.info(f"{args.model_type.upper()} model training completed successfully")
+            logger.info(f"Model training completed successfully")
             logger.info(f"Model saved to: {args.model}")
-            if not args.no_eval:
-                logger.info(f"Evaluation report saved to: {args.report}")
+            if report_file:
+                logger.info(f"Evaluation report saved to: {report_file}")
             return 0
         else:
             logger.error("Model training failed")
@@ -190,4 +130,6 @@ def run(args):
     
     except Exception as e:
         logger.error(f"Error during model training: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return 1
