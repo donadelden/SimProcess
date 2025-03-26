@@ -1,7 +1,6 @@
 *.csv
 *.png
 *.svg
-*.pdf
 /Mosaik/__pycache__
 /Panda/__pycache__
 *pyc
