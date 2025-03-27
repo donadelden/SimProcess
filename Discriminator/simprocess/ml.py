@@ -431,7 +431,14 @@ def train_binary(features_file, model_path, report_file=None, features_to_keep=N
                 df_feat = feat_relevance[['feature', 'p_value']]
                 df_feat.columns = ['Feature', 'Importance']
                 
-                # Save feature importance
+                importance_dir = os.path.dirname(features_file)
+                if not importance_dir:
+                    importance_dir = "."  # Use current directory if no path specified
+                importance_path = os.path.join(importance_dir, f"feature_importance_{column_name or 'features'}.csv")
+
+                if not os.path.exists(importance_path):
+                    logger.info(f"Calculating feature importance for {column_name or 'features'}")
+
                 os.makedirs(os.path.dirname(importance_path), exist_ok=True)
                 df_feat.to_csv(importance_path, index=False)
             else:
