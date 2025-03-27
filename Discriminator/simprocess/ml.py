@@ -37,7 +37,7 @@ DEFAULT_APPLIED_NOISES = ["gaussian+uniform", "gaussian1", "gaussian2", "uniform
 FAST_MODE = 0
 
 
-def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, fluctuating=False):
+def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, dynamic=False):
     """
     Internal function to train a model applying GridSearchCV on a set of parameters 
     and return the scores and other info.
@@ -48,7 +48,7 @@ def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, fluctuating
         model: Scikit-learn model to train
         parameters (dict): Parameters for GridSearchCV
         dataset_balancing_ratio (float): Ratio for SMOTE balancing
-        fluctuating (bool): Whether to test on fluctuating data
+        dynamic (bool): Whether to test on dynamic data
         
     Returns:
         dict: Dictionary with results and model information
@@ -63,16 +63,16 @@ def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, fluctuating
     X_non_real = X.loc[non_real_indices]
     y_non_real = y.loc[non_real_indices]
 
-    if fluctuating: 
-        # Extract values where "source" starts with "fluctuating_"
-        fluctuating_indices = y_non_real[y_non_real['source'].str.startswith("fluctuating_")].index
-        X_fluctuating = X_non_real.loc[fluctuating_indices]
-        y_fluctuating_all = y_non_real.loc[fluctuating_indices]
-        y_fluctuating = y_fluctuating_all['real'].copy()
+    if dynamic: 
+        # Extract values where "source" starts with "dynamic_"
+        dynamic_indices = y_non_real[y_non_real['source'].str.startswith("dynamic_")].index
+        X_dynamic = X_non_real.loc[dynamic_indices]
+        y_dynamic_all = y_non_real.loc[dynamic_indices]
+        y_dynamic = y_dynamic_all['real'].copy()
 
-        # Remove fluctuating values from non_real
-        X_non_real = X_non_real.drop(fluctuating_indices)
-        y_non_real = y_non_real.drop(fluctuating_indices)
+        # Remove dynamic values from non_real
+        X_non_real = X_non_real.drop(dynamic_indices)
+        y_non_real = y_non_real.drop(dynamic_indices)
 
     # Generate training set and testing set for real data
     try:
@@ -103,10 +103,10 @@ def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, fluctuating
     y_train = y_train_all['real'].copy()
 
     # Select the test set
-    if fluctuating:
-        X_test = X_fluctuating
-        y_test = y_fluctuating
-        y_test_all = y_fluctuating_all
+    if dynamic:
+        X_test = X_dynamic
+        y_test = y_dynamic
+        y_test_all = y_dynamic_all
     else:
         # Reduce the testing set by a factor of 0.5
         X_test_non_real, _, y_test_non_real, _ = train_test_split(
@@ -126,7 +126,7 @@ def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, fluctuating
     else:
         dataset_balancing_ratio = y_train.value_counts()[1] / y_train.value_counts()[0]
     
-    logger.info(f"Training data size: {len(X_train)} ({y_train.value_counts()}), Testing data size: {len(X_test)}, ratio: {dataset_balancing_ratio}, fluctuating: {fluctuating}")
+    logger.info(f"Training data size: {len(X_train)} ({y_train.value_counts()}), Testing data size: {len(X_test)}, ratio: {dataset_balancing_ratio}, dynamic: {dynamic}")
 
     # Create a GridSearchCV object
     grid_search = GridSearchCV(model, parameters, refit=True, verbose=1, cv=5, n_jobs=-1, scoring="recall")
@@ -181,12 +181,12 @@ def _train_model(X, y, model, parameters, dataset_balancing_ratio=1, fluctuating
         "stdev_probas": stdev_probas, 
         "sem_probas": sem_probas, 
         "split": split, 
-        "fluctuating": fluctuating,
+        "dynamic": dynamic,
         "best_estimator": grid_search.best_estimator_
     }
 
 
-def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ratio=1, fluctuation=False):
+def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ratio=1, dynamic=False):
     """
     Train multiple models and return the results.
     
@@ -195,7 +195,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
         y_column (str or list): Target column(s) 
         fast_mode (int): Training mode (0=full, 1=reduced, 2=minimal)
         dataset_balancing_ratio (float): Ratio for SMOTE balancing
-        fluctuation (bool): Whether to test on fluctuating data
+        dynamic (bool): Whether to test on dynamic data
         
     Returns:
         list: List of result dictionaries
@@ -223,7 +223,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
             'min_samples_split': [2, 5, 10],
             'min_samples_leaf': [1, 2, 4]
         }
-    results.append(_train_model(df, y, rf_classifier, rf_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, fluctuating=fluctuation))
+    results.append(_train_model(df, y, rf_classifier, rf_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, dynamic=dynamic))
 
     # Only train other models if not in fast mode 2
     if fast_mode <= 1:
@@ -244,7 +244,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
                 'max_iter': [500, 1000],
                 'early_stopping': [True]
             }
-        results.append(_train_model(df, y, nn_classifier, nn_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, fluctuating=fluctuation))
+        results.append(_train_model(df, y, nn_classifier, nn_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, dynamic=dynamic))
 
         # Create a Logistic Regression classifier
         lr_classifier = LogisticRegression()
@@ -258,7 +258,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
                 'C': [0.01, 0.1, 1, 10, 100],
                 'solver': ['newton-cg', 'lbfgs', 'liblinear']
             }
-        results.append(_train_model(df, y, lr_classifier, lr_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, fluctuating=fluctuation))
+        results.append(_train_model(df, y, lr_classifier, lr_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, dynamic=dynamic))
 
         # Create an AdaBoost classifier
         ada_classifier = AdaBoostClassifier()
@@ -272,7 +272,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
                 'n_estimators': [50, 100, 200],
                 'learning_rate': [0.01, 0.1, 1, 10]
             }
-        results.append(_train_model(df, y, ada_classifier, ada_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, fluctuating=fluctuation))
+        results.append(_train_model(df, y, ada_classifier, ada_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, dynamic=dynamic))
 
         # Create a Decision Tree classifier
         dt_classifier = DecisionTreeClassifier()
@@ -290,7 +290,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
                 'min_samples_split': [2, 5, 10],
                 'min_samples_leaf': [1, 2, 4]
             }
-        results.append(_train_model(df, y, dt_classifier, dt_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, fluctuating=fluctuation))
+        results.append(_train_model(df, y, dt_classifier, dt_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, dynamic=dynamic))
 
         # Create a K-Nearest Neighbors classifier
         knn_classifier = KNeighborsClassifier()
@@ -309,7 +309,7 @@ def _train_models_binary(df, y_column, fast_mode=FAST_MODE, dataset_balancing_ra
                 'algorithm': ['auto', 'ball_tree', 'kd_tree', 'brute'],
                 'leaf_size': [10, 30, 50]
             }
-        results.append(_train_model(df, y, knn_classifier, knn_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, fluctuating=fluctuation))
+        results.append(_train_model(df, y, knn_classifier, knn_param_grid, dataset_balancing_ratio=dataset_balancing_ratio, dynamic=dynamic))
 
     return results
 
@@ -368,7 +368,7 @@ def _train_reducing_features(X, y_column, features_list, max_features=10, balRat
 
 
 def train_binary(features_file, model_path, report_file=None, features_to_keep=None, 
-                dataset_balancing_ratio=1, fast_mode=FAST_MODE, fluctuation=False):
+                dataset_balancing_ratio=1, fast_mode=FAST_MODE, dynamic=False):
     """
     Train multiple models on binary classification and save the best model.
     
@@ -379,7 +379,7 @@ def train_binary(features_file, model_path, report_file=None, features_to_keep=N
         features_to_keep (int, optional): Number of top features to keep
         dataset_balancing_ratio (float): Ratio for SMOTE balancing
         fast_mode (int): Training mode (0=full, 1=reduced, 2=minimal)
-        fluctuation (bool): Whether to test on fluctuating data
+        dynamic (bool): Whether to test on dynamic data
         
     Returns:
         bool: True if successful, False otherwise
@@ -461,10 +461,10 @@ def train_binary(features_file, model_path, report_file=None, features_to_keep=N
             df = df[~df['source'].str.contains("Gan", case=False, na=False)]
             logger.info("Removed GAN-generated samples")
             
-            # Drop or keep rows with fluctuating data
-            if not fluctuation and 'source' in df.columns:
-                df = df[~df['source'].str.contains("fluctuating_", case=False, na=False)]
-                logger.info("Removed fluctuating samples")
+            # Drop or keep rows with dynamic data
+            if not dynamic and 'source' in df.columns:
+                df = df[~df['source'].str.contains("dynamic_", case=False, na=False)]
+                logger.info("Removed dynamic samples")
         
         df = df.reset_index(drop=True)
         
@@ -473,7 +473,7 @@ def train_binary(features_file, model_path, report_file=None, features_to_keep=N
         results = _train_models_binary(df, ['real', 'source'], 
                                      fast_mode=fast_mode,
                                      dataset_balancing_ratio=dataset_balancing_ratio,
-                                     fluctuation=fluctuation)
+                                     dynamic=dynamic)
         
         # Find the best model based on F1 score
         best_result = max(results, key=lambda x: x['f1'])
@@ -612,10 +612,10 @@ def train_reducing_features(features_file, model_path, report_file=None, max_fea
         df_feat = df_feat.sort_values(by='Importance', ascending=False)
         features_list = df_feat['Feature'].tolist()
         
-        # Drop rows where 'source' contains the word "Gan" or "fluctuating_"
+        # Drop rows where 'source' contains the word "Gan" or "dynamic_"
         if 'source' in df.columns:
             df = df[~df['source'].str.contains("Gan", case=False, na=False)]
-            df = df[~df['source'].str.contains("fluctuating_", case=False, na=False)]
+            df = df[~df['source'].str.contains("dynamic_", case=False, na=False)]
             
         df = df.reset_index(drop=True)
         

@@ -52,7 +52,7 @@ generate_mosaik() {
 echo "🚀 Starting Mosaik datasets generation with single and multiple noise types..."
 echo ""
 
-generate_mosaik "fluctuating_" 245 20 50 3000
+generate_mosaik "dynamic_" 245 20 50 3000
 
 echo "🎉 All Mosaik datasets generated successfully!"
 echo "Generated files:"

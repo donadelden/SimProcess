@@ -28,8 +28,7 @@ def setup_parser(parser):
                       help=f'Path to save the trained model (default: {DEFAULT_MODEL_PATH})')
     
     parser.add_argument('--report', '-r',
-                      default=DEFAULT_REPORT_PATH,
-                      help=f'Path to save evaluation report (default: {DEFAULT_REPORT_PATH})')
+                      help='Path to save evaluation report (default: derived from input filename)')
     
     # Training mode
     parser.add_argument('--training-mode',
@@ -59,9 +58,9 @@ def setup_parser(parser):
                       default=20,
                       help='Maximum number of features to use in feature reduction mode (default: 20)')
     
-    parser.add_argument('--fluctuation',
+    parser.add_argument('--dynamic',
                       action='store_true',
-                      help='Test on fluctuating data')
+                      help='Test on dynamic data')
     
     parser.add_argument('--no-eval',
                       action='store_true',
@@ -88,8 +87,29 @@ def run(args):
         return 1
     
     try:
-        # Set up report file path
-        report_file = args.report if not args.no_eval else None
+        # Set up report file path with dynamic suffix if --dynamic is used
+        if args.no_eval:
+            report_file = None
+        else:
+            if args.report:
+                report_file = args.report
+            else:
+                # Generate default report filename based on input filename
+                input_basename = os.path.basename(args.input)
+                input_name = os.path.splitext(input_basename)[0]  # Remove extension
+                
+                # Add _dynamic suffix if dynamic flag is set
+                if args.dynamic:
+                    report_file = f"evaluation_report_dynamic.csv"
+                else:
+                    report_file = f"evaluation_report.csv"
+                
+                # If input file is in another directory, use that directory for the report
+                input_dir = os.path.dirname(args.input)
+                if input_dir:
+                    report_file = os.path.join(input_dir, report_file)
+                
+                logger.info(f"Using default report file: {report_file}")
         
         if args.training_mode == 'feature-reduction':
             # Use feature reduction training method from ml.py
@@ -115,7 +135,7 @@ def run(args):
                 features_to_keep=args.features_to_keep,
                 dataset_balancing_ratio=args.balancing_ratio,
                 fast_mode=args.fast_mode,
-                fluctuation=args.fluctuation
+                dynamic=args.dynamic
             )
         
         if success:

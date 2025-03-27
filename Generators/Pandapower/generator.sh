@@ -56,7 +56,7 @@ echo "🚀 Starting Pandapower dataset generation with single and multiple noise
 echo ""
 
 # Generate datasets with default parameters (voltage=245, current=20, frequency=50, samples=3000)
-generate_datasets "fluctuating_" 245 20 50 3000
+generate_datasets "dynamic_" 245 20 50 3000
 
 echo "🎉 All Pandapower datasets generated successfully!"
 echo "Generated files:"

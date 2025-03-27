@@ -152,7 +152,7 @@ def train_models(feature_files):
                 balancing_ratio=0.9,
                 features_to_keep=11,
                 max_features=20,
-                fluctuation=False,
+                dynamic=False,
                 no_eval=False
             )
             
