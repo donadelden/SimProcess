@@ -2,68 +2,64 @@
 
 This project provides tools for generating synthetic power grid data, processing real power grid measurements, and discriminating between real and simulated scenarios using machine learning.
 
-## Components
+## Project Overview
 
-### Generators
+SimProcess is a comprehensive framework designed to work with power grid data from both simulated and real sources. It enables researchers and engineers to generate synthetic power system data, analyze real-world measurements, and develop models that can distinguish between authentic and synthetic signals.
 
-The project includes two power grid data generators based on industry-standard simulation frameworks:
+## Repository Structure
 
-#### Mosaik Generator
-
-```
-usage: main.py [-h] [--no-noise] [--processed-output PROCESSED_OUTPUT] [--voltage VOLTAGE] [--current CURRENT] [--frequency FREQUENCY] duration
-```
-
-#### Pandapower Generator
-
-```
-usage: main.py [-h] [--voltage VOLTAGE] [--current CURRENT] [--frequency FREQUENCY] duration
-```
-
-### EPIC Data Processing
-
-The EPIC folder contains tools for handling real power grid data from the EPIC testbed:
-
-- Preprocessor utility to standardize real data format
-- Ensures compatibility with simulated data format for analysis
-
-```
-Usage: python3 preprocessor.py csv_file
-```
+The repository is organized into three main components:
 
 ### Discriminator
 
-Tools for analyzing power grid data:
+The core analysis framework that processes power system data and classifies signals as real or simulated:
 
-#### Analyzer
+- **simprocess**: Core library with feature extraction, machine learning, and analysis capabilities
+- **tools**: Utility scripts for data handling
+- **main.py**: Primary entry point for the SimProcess framework
+- **workflow_example.py**: Example script showing a complete analysis pipeline
 
-```
-usage: analyzer.py [-h] [--window WINDOW] [--output-dir OUTPUT_DIR] csv_file
-```
+### Generators
 
-- Outputs visual analysis of CSV data files
-- Supports sliding window analysis
+This directory contains different implementations of power grid simulators:
 
-#### GALILEO
+- **Mosaik**: Generator based on the Mosaik co-simulation framework
+- **Pandapower**: Generator based on the Pandapower network calculation framework
+- **VariationalRecurrentNeuralNetwork**: VRAE-based generator for power system data
 
-```
-usage: galileo.py [-h] --input INPUT [--real [REAL ...]] [--simulated [SIMULATED ...]] [--model MODEL] {train,analyze}
-```
+### EPIC
 
-- SVM-based classification system
-- Two main modes of operation:
-  1. Training: Build model using labeled real and simulated data
-  2. Analysis: Classify new data as real or simulated
+Tools for working with the Electric Power and Intelligent Control (EPIC) dataset:
 
-## Workflow
+- **preprocessor.py**: Utility for transforming EPIC dataset measurements to the standardized format used by SimProcess
+- Additional support files for EPIC data integration
 
-1. Generate synthetic data using either Mosaik or Pandapower generators
-2. Process real EPIC testbed data using the preprocessor
-3. Train GALILEO using both real and simulated datasets
-   ```
-   example: galileo.py train --input . --real real_data.csv --simulated fake_data.csv
-   ```
-4. Use the trained model to analyze and classify new power grid scenarios
-   ```
-   example: galileo.py analyze --input some_data.csv
-   ```
+## Key Features
+
+- **Synthetic Data Generation**: Multiple approaches to generate realistic power grid data with configurable noise profiles
+- **Multi-level Noise Modeling**: Support for layered noise types including Gaussian, uniform, Laplace, impulse, and more
+- **Feature Extraction**: Statistical feature extraction from time series data
+- **Machine Learning Classification**: Models to discriminate between real and simulated signals
+- **Visualization Tools**: Comprehensive plotting and analysis utilities
+- **Pipeline Integration**: End-to-end workflow from data generation/collection to final classification
+
+## Dataset Sources
+
+The framework works with both synthetic and real-world datasets:
+
+- **Synthetic Data**: Generated using the Mosaik and Pandapower simulators
+- **Real Data**: EPIC dataset from the Singapore University of Technology and Design (SUTD)
+
+The EPIC dataset can be requested from iTrust, Centre for Research in Cyber Security at SUTD: [https://itrust.sutd.edu.sg/itrust-labs_datasets/dataset_info/](https://itrust.sutd.edu.sg/itrust-labs_datasets/dataset_info/)
+
+## Getting Started
+
+The repository includes several README files with detailed instructions for each component:
+
+- See Discriminator/README.md for SimProcess analysis framework documentation
+- See Generators/Mosaik/README.md and Generators/Pandapower/README.md for data generation tools
+- See EPIC/README.md for information on processing real-world power grid data
+
+## License
+
+MIT License
