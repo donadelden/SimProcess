@@ -2,7 +2,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="simdetector",
+    name="simprocess",
     version="1.0.0",
     description="Signal Analysis and Classification Framework",
     author="PLACEHOLDER",
@@ -19,7 +19,7 @@ setup(
     ],
     entry_points={
         "console_scripts": [
-            "simdetector=main:main",
+            "simprocess=main:main",
         ],
     },
     classifiers=[

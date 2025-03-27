@@ -1,11 +1,11 @@
 """
-Analyze command implementation for SimDetector CLI.
+Analyze command implementation for SimProcess CLI.
 """
 
 import logging
 import os
-from simdetector.model import analyze_with_model
-from simdetector.core import (
+from simprocess.model import analyze_with_model
+from simprocess.core import (
     DEFAULT_MODEL_PATH, 
     DEFAULT_WINDOW_SIZE,
     DEFAULT_FILTER_TYPE,
@@ -15,7 +15,7 @@ from simdetector.core import (
     ModelError
 )
 
-logger = logging.getLogger('simdetector.cli.analyze')
+logger = logging.getLogger('simprocess.cli.analyze')
 
 def setup_parser(parser):
     """

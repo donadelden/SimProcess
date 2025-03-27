@@ -1,5 +1,5 @@
 """
-Core functionality and constants for the SimDetector framework.
+Core functionality and constants for the SimProcess framework.
 """
 
 import os
@@ -11,7 +11,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
-logger = logging.getLogger('simdetector')
+logger = logging.getLogger('simprocess')
 
 # Constants
 DEFAULT_WINDOW_SIZE = 20
@@ -21,7 +21,7 @@ DEFAULT_FS = 1.0
 DEFAULT_POLY_ORDER = 2
 DEFAULT_TRAIN_RATIO = 0.8
 DEFAULT_RANDOM_SEED = 42
-DEFAULT_MODEL_PATH = 'simdetector_model.joblib'
+DEFAULT_MODEL_PATH = 'simprocess_model.joblib'
 DEFAULT_REPORT_PATH = 'evaluation_report.csv'
 DEFAULT_PROCESS_VARIANCE = 1e-5
 DEFAULT_MEASUREMENT_VARIANCE = 1e-1
@@ -40,19 +40,19 @@ CRITICAL_FEATURES = [
     'std', 'variance', 'entropy', 'autocorr', 'kurtosis'
 ]
 
-class SimDetector(Exception):
-    """Base exception for SimDetector framework errors."""
+class SimProcess(Exception):
+    """Base exception for SimProcess framework errors."""
     pass
 
-class DataLoadError(SimDetector):
+class DataLoadError(SimProcess):
     """Exception raised when data loading fails."""
     pass
 
-class FeatureExtractionError(SimDetector):
+class FeatureExtractionError(SimProcess):
     """Exception raised when feature extraction fails."""
     pass
 
-class ModelError(SimDetector):
+class ModelError(SimProcess):
     """Exception raised for model-related errors."""
     pass
 

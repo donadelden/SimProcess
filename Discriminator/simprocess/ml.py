@@ -1,5 +1,5 @@
 """
-Advanced machine learning models and training for the SimDetector framework.
+Advanced machine learning models and training for the SimProcess framework.
 """
 
 import os
@@ -18,7 +18,7 @@ from tsfresh.feature_selection.relevance import calculate_relevance_table
 from imblearn.over_sampling import SMOTE
 import logging
 
-logger = logging.getLogger('simdetector.ml')
+logger = logging.getLogger('simprocess.ml')
 
 # Set random seed for reproducibility
 np.random.seed(42)
@@ -480,7 +480,7 @@ def train_binary(features_file, model_path, report_file=None, features_to_keep=N
         # Get the best estimator
         best_estimator = best_result['best_estimator']
         
-        # Create a standardized object for saving, compatible with SimDetector's format
+        # Create a standardized object for saving, compatible with SimProcess's format
         # Need to include the model type so the predict functions can handle it
         model_type = best_result['model'].lower()
         if model_type == 'randomforestclassifier':
@@ -496,14 +496,14 @@ def train_binary(features_file, model_path, report_file=None, features_to_keep=N
         elif model_type == 'kneighborsclassifier':
             model_type = 'knn'
         
-        # Create a mock StandardScaler (SimDetector expects this format)
+        # Create a mock StandardScaler (SimProcess expects this format)
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler()
         
         # Get feature names
         feature_names = df.drop(columns=['real', 'source']).columns.tolist()
         
-        # Save in SimDetector's format
+        # Save in SimProcess's format
         joblib.dump((best_estimator, scaler, feature_names, column_name, model_type), model_path)
         logger.info(f"Model saved to {model_path}")
         
@@ -631,7 +631,7 @@ def train_reducing_features(features_file, model_path, report_file=None, max_fea
         # Get the best estimator
         best_estimator = best_result['best_estimator']
         
-        # Create a standardized object for saving, compatible with SimDetector's format
+        # Create a standardized object for saving, compatible with SimProcess's format
         from sklearn.preprocessing import StandardScaler
         scaler = StandardScaler()
         
@@ -639,7 +639,7 @@ def train_reducing_features(features_file, model_path, report_file=None, max_fea
         feature_count = best_result.get('features_size', max_features)
         feature_names = features_list[:feature_count]
         
-        # Save in SimDetector's format
+        # Save in SimProcess's format
         joblib.dump((best_estimator, scaler, feature_names, column_name, 'rf'), model_path)
         logger.info(f"Model saved to {model_path}")
         

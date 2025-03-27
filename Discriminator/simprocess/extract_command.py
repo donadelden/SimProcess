@@ -1,10 +1,10 @@
 """
-Extract command implementation for SimDetector CLI.
+Extract command implementation for SimProcess CLI.
 """
 
 import logging
-from simdetector.features import process_csv_files
-from simdetector.core import (
+from simprocess.features import process_csv_files
+from simprocess.core import (
     DEFAULT_WINDOW_SIZE,
     DEFAULT_FILTER_TYPE,
     DEFAULT_CUTOFF,
@@ -12,7 +12,7 @@ from simdetector.core import (
     DEFAULT_POLY_ORDER
 )
 
-logger = logging.getLogger('simdetector.cli.extract')
+logger = logging.getLogger('simprocess.cli.extract')
 
 def setup_parser(parser):
     """

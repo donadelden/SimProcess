@@ -1,16 +1,16 @@
 """
-Train command implementation for SimDetector CLI.
+Train command implementation for SimProcess CLI.
 """
 
 import logging
 import os
-from simdetector.core import (
+from simprocess.core import (
     DEFAULT_MODEL_PATH,
     DEFAULT_REPORT_PATH
 )
-from simdetector.ml import train_binary, train_reducing_features
+from simprocess.ml import train_binary, train_reducing_features
 
-logger = logging.getLogger('simdetector.cli.train')
+logger = logging.getLogger('simprocess.cli.train')
 
 def setup_parser(parser):
     """

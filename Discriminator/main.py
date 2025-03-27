@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SimDetector - Signal Analysis and Classification Framework
+SimProcess - Signal Analysis and Classification Framework
 
 A tool for analyzing time series data, extracting features, 
 and classifying signals as real or simulated.
@@ -8,7 +8,7 @@ and classifying signals as real or simulated.
 
 import sys
 import argparse
-from simdetector.cli import (
+from simprocess.cli import (
     extract_command, 
     train_command, 
     evaluate_command,
@@ -19,12 +19,12 @@ from simdetector.cli import (
 def create_parser():
     """Create the main argument parser with subcommands."""
     parser = argparse.ArgumentParser(
-        description="SimDetector - Signal Analysis and Classification Framework",
+        description="SimProcess - Signal Analysis and Classification Framework",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
     # Version information
-    parser.add_argument('--version', action='version', version='SimDetector v1.0.0')
+    parser.add_argument('--version', action='version', version='SimProcess v1.0.0')
     
     # Create subparsers for different commands
     subparsers = parser.add_subparsers(dest='command', help='Command to execute')

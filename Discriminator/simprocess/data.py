@@ -1,14 +1,14 @@
 """
-Data loading and preprocessing functions for the SimDetector framework.
+Data loading and preprocessing functions for the SimProcess framework.
 """
 
 import pandas as pd
 import numpy as np
 import scipy.signal as signal
 import logging
-from simdetector.core import DataLoadError, is_numeric_column
+from simprocess.core import DataLoadError, is_numeric_column
 
-logger = logging.getLogger('simdetector.data')
+logger = logging.getLogger('simprocess.data')
 
 def load_data(file_path):
     """
@@ -48,7 +48,7 @@ def filter_window(window, epsilon=0.1, target_column=None):
     # Import required modules
     import pandas as pd
     import numpy as np
-    from simdetector.core import is_numeric_column, SIGNAL_TYPES
+    from simprocess.core import is_numeric_column, SIGNAL_TYPES
     
     filter_columns = []
     

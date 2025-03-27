@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-simdetector Extract and Train Workflow
+simprocess Extract and Train Workflow
 
 This script:
 1. Extracts features from all CSV files in the dataset/ directory
@@ -11,7 +11,7 @@ This script:
 3. Saves the results in organized directories
 
 Usage:
-    python extract_train_workflow.py [--output-dir OUTPUT_DIR]
+    python workflow_example.py [--output-dir OUTPUT_DIR]
 """
 
 import os
@@ -19,14 +19,14 @@ import logging
 import argparse
 import sys
 import glob
-from simdetector.features import process_csv_files
-from simdetector.core import SIGNAL_TYPES
-from simdetector.train_command import run as train_run
+from simprocess.features import process_csv_files
+from simprocess.core import SIGNAL_TYPES
+from simprocess.train_command import run as train_run
 from argparse import Namespace
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('simdetector_workflow')
+logger = logging.getLogger('simprocess_workflow')
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Extract features and train models from dataset')
@@ -171,7 +171,7 @@ def train_models(feature_files):
 
 def main():
     """Run the complete workflow."""
-    logger.info("Starting simdetector Extract and Train Workflow")
+    logger.info("Starting simprocess Extract and Train Workflow")
     
     # Create necessary directories
     ensure_dirs_exist()

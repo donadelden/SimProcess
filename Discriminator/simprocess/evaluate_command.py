@@ -1,5 +1,5 @@
 """
-Evaluate command implementation for SimDetector CLI.
+Evaluate command implementation for SimProcess CLI.
 """
 
 import logging
@@ -7,19 +7,19 @@ import os
 import joblib
 import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix
-from simdetector.model import split_features_dataset, evaluate_model
-from simdetector.visualization import (
+from simprocess.model import split_features_dataset, evaluate_model
+from simprocess.visualization import (
     plot_confusion_matrix,
     plot_prediction_distribution,
     generate_report_summary
 )
-from simdetector.core import (
+from simprocess.core import (
     DEFAULT_MODEL_PATH,
     DEFAULT_REPORT_PATH,
     DEFAULT_TRAIN_RATIO
 )
 
-logger = logging.getLogger('simdetector.cli.evaluate')
+logger = logging.getLogger('simprocess.cli.evaluate')
 
 def setup_parser(parser):
     """

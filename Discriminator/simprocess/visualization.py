@@ -1,5 +1,5 @@
 """
-Visualization functions for the SimDetector framework.
+Visualization functions for the SimProcess framework.
 """
 
 import matplotlib.pyplot as plt
@@ -8,7 +8,7 @@ import pandas as pd
 import logging
 import os
 
-logger = logging.getLogger('simdetector.visualization')
+logger = logging.getLogger('simprocess.visualization')
 
 def plot_feature_importance(importance_df, title="Feature Importance", metric_name=None, output_dir=None):
     """

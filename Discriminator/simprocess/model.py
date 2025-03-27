@@ -1,5 +1,5 @@
 """
-Model training, evaluation, and prediction for the SimDetector framework.
+Model training, evaluation, and prediction for the SimProcess framework.
 """
 
 import os
@@ -14,12 +14,12 @@ from sklearn.svm import OneClassSVM
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score
 from sklearn.inspection import permutation_importance
-from simdetector.data import load_data, extract_noise_signal
-from simdetector.features import extract_window_features, extract_features
-from simdetector.core import ModelError, validate_file_path
-from simdetector.visualization import plot_feature_importance, plot_prediction_distribution
+from simprocess.data import load_data, extract_noise_signal
+from simprocess.features import extract_window_features, extract_features
+from simprocess.core import ModelError, validate_file_path
+from simprocess.visualization import plot_feature_importance, plot_prediction_distribution
 
-logger = logging.getLogger('simdetector.model')
+logger = logging.getLogger('simprocess.model')
 
 def split_features_dataset(features_file, train_ratio=0.8, random_seed=42, noise_only=False):
     """
@@ -760,7 +760,7 @@ def analyze_with_model(model_path, input_file, target_column, output_dir="analys
         # Create summary file
         summary_file = os.path.join(output_dir, "analysis_summary.txt")
         with open(summary_file, 'w') as f:
-            f.write(f"SimDetector Analysis Summary\n")
+            f.write(f"SimProcess Analysis Summary\n")
             f.write(f"======================\n\n")
             f.write(f"Input file: {input_file}\n")
             f.write(f"Analyzed column: {target_column}\n")
