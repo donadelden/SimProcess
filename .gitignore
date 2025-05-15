@@ -6,6 +6,7 @@
 *pyc
 *.zip
 /Discriminator/results
+!/Discriminator/tools/sample_results/*.csv
 *.joblib
 *.pth
 venv
