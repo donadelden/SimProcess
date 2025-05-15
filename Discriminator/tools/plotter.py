@@ -9,13 +9,14 @@ import matplotlib.pyplot as plt
 plt.rcParams.update({'font.size': 17})
 marker_size = 10
 line_width = 1.5
-column_order = ["C1", "C2", "C3", "V1", "V2", "V3", "frequency", "power_apparent", "power_reactive", "power_real", "allvalues"]
+column_order = ["I1", "I2", "I3", "V1", "V2", "V3", "frequency", "power_apparent", "power_reactive", "power_real", "allvalues"]
 
 
 def plot_delta_accuracies_on_each_source(results_path, window = 20, filename="V1", model="RandomForestClassifier", features_number=11, balRatio=0.9):
 
     # load normal data
     df = pd.read_csv(results_path)
+    df['filename'] = df['filename'].replace('C1', 'I1').replace('C2', 'I2').replace('C3', 'I3')
     df = df[df['features_size'] == features_number]
     df = df[df['DatasetBalancin'] == balRatio]
     df = df[df['model'] == model]
@@ -47,6 +48,7 @@ def plot_delta_accuracies_on_each_source(results_path, window = 20, filename="V1
     # Load dynamic data
     file_path_dynamic = results_path[:-4] + "_dynamic.csv"
     df_dynamic = pd.read_csv(file_path_dynamic)
+    df_dynamic['filename'] = df_dynamic['filename'].replace('C1', 'I1').replace('C2', 'I2').replace('C3', 'I3')
     df_dynamic = df_dynamic[df_dynamic['model'] == model]
     df_dynamic = df_dynamic[df_dynamic['window_size'] == window]
     df_dynamic = df_dynamic[df_dynamic['features_size'] == features_number]
@@ -71,8 +73,8 @@ def plot_delta_accuracies_on_each_source(results_path, window = 20, filename="V1
     
     # Compute delta between normal and dynamic data
     # Adjust the indices of mean_probas_fluc to match mean_probas
-    mean_probas_dynamic.columns = mean_probas_dynamic.columns.str.replace('dynamic_', '').str.replace(".csv", "")
-    sem_probas_dynamic.columns = sem_probas_dynamic.columns.str.replace('dynamic_', '').str.replace(".csv", "")
+    mean_probas_dynamic.columns = mean_probas_dynamic.columns.str.replace('fluctuating_', '').str.replace(".csv", "")
+    sem_probas_dynamic.columns = sem_probas_dynamic.columns.str.replace('fluctuating_', '').str.replace(".csv", "")
 
     # Compute delta between normal and dynamic data
     mean_probas_dynamic_selected = mean_probas_dynamic.loc[filename].reindex(mean_probas_selected.index)
@@ -127,6 +129,7 @@ def plot_delta_accuracies_on_each_source(results_path, window = 20, filename="V1
 def plot_binary_models(results_path, window = 50, balRatio=0.9, features_number=11): 
     
     df = pd.read_csv(results_path)
+    df['filename'] = df['filename'].replace('C1', 'I1').replace('C2', 'I2').replace('C3', 'I3')
     df = df[df['features_size'] == features_number]
     df = df[df['DatasetBalancin'] == balRatio]
     df = df[df['window_size'] == window]
@@ -170,16 +173,15 @@ def plot_binary_models(results_path, window = 50, balRatio=0.9, features_number=
         plt.show()
 
 
-
-
 def plot_window(results_path, model="RandomForestClassifier", balRatio=0.9, features=11):
 
     # Load the CSV file into a pandas DataFrame
     df = pd.read_csv(results_path)
+    df['filename'] = df['filename'].replace('C1', 'I1').replace('C2', 'I2').replace('C3', 'I3')
     df = df[df['model'] == model]
     df = df[df['DatasetBalancin'] == balRatio]
     df = df[df['features_size'] == features]
-    df = df[df['filename'].isin(['V1', 'C1', 'frequency', 'allcolumns', 'allvalues'])]
+    df = df[df['filename'].isin(['V1', 'I1', 'frequency', 'allcolumns', 'allvalues'])]
     df['filename'] = df['filename'].str.replace('allcolumns', 'allvalues') # they are the same thing and only one is available
 
     for metric in ["recall"]:
@@ -200,7 +202,7 @@ def plot_window(results_path, model="RandomForestClassifier", balRatio=0.9, feat
                 data.append({'filename': filename, 'window_size': window_size, metric: accuracy})
         df_plot = pd.DataFrame(data)
 
-        df_plot['filename'] = pd.Categorical(df_plot['filename'], categories=['C1', 'V1', 'frequency', 'allvalues'], ordered=True)
+        df_plot['filename'] = pd.Categorical(df_plot['filename'], categories=['I1', 'V1', 'frequency', 'allvalues'], ordered=True)
         df_plot = df_plot.sort_values('filename')
 
         markers = ['o', 's', 'D', '^', 'v', '<', '>', 'p', '*', 'h', 'H', '+', 'x', 'd', '|', '_']
@@ -227,12 +229,15 @@ if __name__ == "__main__":
     if not os.path.exists("./Results"):
         os.makedirs("./Results")
     
-    plot_window(results_file) 
+    #results_file = "./results/results_kalman_11_balRatio0.9_rf.csv"
+    plot_window(results_file)    
 
-    plot_binary_models(results_file)   
-    
+    #results_file = "./results/results_kalman_11_balRatio0.9_all.csv"
+    plot_binary_models(results_file, window=20)   
+
+    #results_file = "./results/results_kalman_11_balRatio0.9_all.csv"
     for filename in column_order:
         print(f"Filename: {filename}")
-        plot_delta_accuracies_on_each_source(results_file, filename=filename)
+        plot_delta_accuracies_on_each_source(results_file, filename=filename, window=20, model="RandomForestClassifier", features_number=11, balRatio=0.9)
 
 
