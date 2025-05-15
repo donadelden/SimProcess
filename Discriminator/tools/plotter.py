@@ -229,13 +229,13 @@ if __name__ == "__main__":
     if not os.path.exists("./Results"):
         os.makedirs("./Results")
     
-    #results_file = "./results/results_kalman_11_balRatio0.9_rf.csv"
+    #results_file = "./sample_results/results_kalman_11_balRatio0.9_rf.csv"
     plot_window(results_file)    
 
-    #results_file = "./results/results_kalman_11_balRatio0.9_all.csv"
+    #results_file = "./sample_results/results_kalman_11_balRatio0.9_all.csv"
     plot_binary_models(results_file, window=20)   
 
-    #results_file = "./results/results_kalman_11_balRatio0.9_all.csv"
+    #results_file = "./sample_results/results_kalman_11_balRatio0.9_all.csv"
     for filename in column_order:
         print(f"Filename: {filename}")
         plot_delta_accuracies_on_each_source(results_file, filename=filename, window=20, model="RandomForestClassifier", features_number=11, balRatio=0.9)
