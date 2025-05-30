@@ -2,6 +2,20 @@
 
 This project provides tools for generating synthetic power grid data, processing real power grid measurements, and discriminating between real and simulated scenarios using machine learning.
 
+This code supports a paper accepted at the _11th ACM Cyber-Physical System Security Workshop (CPSS'25)_. The preprint is available on [Arxiv](http://arxiv.org/abs/2505.22638). 
+
+Cite this repository as follows:
+```bibtex
+@inproceedings{donadel2025simprocess,
+  title={SimProcess: High Fidelity Simulation of Noisy ICS Physical Processes},
+  author={Donadel, Denis and Crestanello, Gabriele and Morandini, Giulio and Antonioli, Daniele and Conti, Mauro and Merro, Massimo},
+  booktitle={Proceedings of the 11th ACM Cyber-Physical System Security Workshop},
+  pages={1--12},
+  year={2025},
+  organization={ACM Press}
+}
+```
+
 ## Project Overview
 
 SimProcess is a comprehensive framework designed to work with power grid data from both simulated and real sources. It enables researchers and engineers to generate synthetic power system data, analyze real-world measurements, and develop models that can distinguish between authentic and synthetic signals.
